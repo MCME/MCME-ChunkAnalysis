@@ -81,5 +81,12 @@
         <version>5.6.3</version>
         <type>jar</type>
     </dependency>
+    
+    <dependency>
+        <groupId>me.dags</groupId>
+        <artifactId>ResourceRegions</artifactId>
+        <version>1.0.1</version>
+        <type>jar</type>
+    </dependency>
    </dependencies>
 </project>

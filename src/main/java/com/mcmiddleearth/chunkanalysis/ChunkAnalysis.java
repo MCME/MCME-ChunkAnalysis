@@ -21,10 +21,18 @@ package com.mcmiddleearth.chunkanalysis;
 import com.sk89q.worldedit.bukkit.WorldEditPlugin;
 import com.sk89q.worldedit.bukkit.selections.Selection;
 import java.awt.Point;
+import java.awt.Polygon;
+import java.awt.Rectangle;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
-import org.bukkit.Chunk;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import me.dags.resourceregions.region.Region;
+import me.dags.resourceregions.region.RegionManager;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -47,10 +55,19 @@ public class ChunkAnalysis extends JavaPlugin {
     
     private static WorldEditPlugin worldEdit;
     
+    private static RegionManager rm = null;
+    
     @Override
     public void onEnable(){
         this.getCommand("block").setExecutor(new Commands());
         worldEdit = (WorldEditPlugin) this.getServer().getPluginManager().getPlugin("WorldEdit");
+        try {
+            Method gi = RegionManager.class.getMethod("i");
+            gi.setAccessible(true);
+            rm = (RegionManager) gi.invoke(null);
+        } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
+            Logger.getLogger(ChunkAnalysis.class.getName()).log(Level.SEVERE, null, ex);
+        }
         this.saveDefaultConfig();
         maxChunk = confToPoint("maxChunk");
         minChunk = confToPoint("minChunk");
@@ -102,9 +119,12 @@ public class ChunkAnalysis extends JavaPlugin {
                             return true;
                         }
                     }else if(args.contains("-p")){
-                        if(sender instanceof Player){
+                        if(sender instanceof Player && rm != null){
                             int i = args.indexOf("-p");
                             pack = args.get(i+1);
+                        }else if(rm == null){
+                            sender.sendMessage("Internal error: could not locate resource regions plugin data");
+                            return true;
                         }else{
                             sender.sendMessage("Cannot use pack param with console!");
                             return true;
@@ -127,9 +147,32 @@ public class ChunkAnalysis extends JavaPlugin {
                             }
                         }
                     }else if(pack != null){
-                        
-                        
-                        
+                        Region reg = null;
+                        for(Region r : (Set<Region>) forceGet(rm, "regions")){
+                            if(r.getName().equalsIgnoreCase(pack)){
+                                reg=r;
+                                break;
+                            }
+                        }
+                        if(reg==null){
+                            sender.sendMessage("Pack not found!");
+                            return true;
+                        }
+                        int n = (int) forceGet(rm, "n");
+                        int[] xpoints = (int[]) forceGet(rm, "xpoints");
+                        int[] zpoints = (int[]) forceGet(rm, "zpoints");
+                        Rectangle bounds = new Polygon(xpoints, zpoints, n).getBounds();
+                        for(int x = bounds.x; x < bounds.x + bounds.width; x++){
+                            for(int z = bounds.y; z < bounds.y + bounds.height; z++){
+                                for(int y = 0; y < 255; y++){
+                                    Block b = new Location(((Player) sender).getWorld(), x, y, z).getBlock();
+                                    if(b.getType().equals(block) && b.getData() == data && (tags != null ? checkFlags(tags, b) : true)){
+                                        sender.sendMessage(" - ("+x+","+y+","+z+")");
+                                        count++;
+                                    }
+                                }
+                            }
+                        }
                     }else{
                         World w = ((Player) sender).getWorld();
                         for(int cx = minChunk.x; cx <= maxChunk.x; cx++){
@@ -234,9 +277,34 @@ public class ChunkAnalysis extends JavaPlugin {
                             }
                         }
                     }else if(pack != null){
-                        
-                        
-                        
+                        Region reg = null;
+                        for(Region r : (Set<Region>) forceGet(rm, "regions")){
+                            if(r.getName().equalsIgnoreCase(pack)){
+                                reg=r;
+                                break;
+                            }
+                        }
+                        if(reg==null){
+                            sender.sendMessage("Pack not found!");
+                            return true;
+                        }
+                        int n = (int) forceGet(rm, "n");
+                        int[] xpoints = (int[]) forceGet(rm, "xpoints");
+                        int[] zpoints = (int[]) forceGet(rm, "zpoints");
+                        Rectangle bounds = new Polygon(xpoints, zpoints, n).getBounds();
+                        for(int x = bounds.x; x < bounds.x + bounds.width; x++){
+                            for(int z = bounds.y; z < bounds.y + bounds.height; z++){
+                                for(int y = 0; y < 255; y++){
+                                    Block b = new Location(((Player) sender).getWorld(), x, y, z).getBlock();
+                                    if(b.getType().equals(blockFind) && b.getData() == dataFind && (tagsFind != null ? checkFlags(tagsFind, b) : true)){
+                                        b.setType(blockReplace);
+                                        b.setData(dataReplace, false);
+                                        setFlags(tagsReplace, b);
+                                        count++;
+                                    }
+                                }
+                            }
+                        }
                     }else{
                         World w = ((Player) sender).getWorld();
                         for(int cx = minChunk.x; cx <= maxChunk.x; cx++){
@@ -269,6 +337,17 @@ public class ChunkAnalysis extends JavaPlugin {
         
         private void setFlags(String flags, Block block){
             
+        }
+        
+        private Object forceGet(Object o, String name){
+            try {
+                Field f = o.getClass().getDeclaredField(name);
+                f.setAccessible(true);
+                return f.get(o);
+            } catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException ex) {
+                Logger.getLogger(ChunkAnalysis.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            return null;
         }
     }
 }
