@@ -18,12 +18,22 @@
  */
 package com.mcmiddleearth.chunkanalysis;
 
+import com.sk89q.worldedit.bukkit.WorldEditPlugin;
+import com.sk89q.worldedit.bukkit.selections.Selection;
+import java.awt.Point;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
+import org.bukkit.Chunk;
+import org.bukkit.ChunkSnapshot;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -32,9 +42,23 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public class ChunkAnalysis extends JavaPlugin {
     
+    private static Point maxChunk;
+    private static Point minChunk;
+    
+    private static WorldEditPlugin worldEdit;
+    
     @Override
     public void onEnable(){
         this.getCommand("block").setExecutor(new Commands());
+        worldEdit = (WorldEditPlugin) this.getServer().getPluginManager().getPlugin("WorldEdit");
+        this.saveDefaultConfig();
+        maxChunk = confToPoint("maxChunk");
+        minChunk = confToPoint("minChunk");
+    }
+    
+    private Point confToPoint(String conf){
+        String[] crds = this.getConfig().getString(conf).split(",");
+        return new Point(Integer.parseInt(crds[0]), Integer.parseInt(crds[1]));
     }
     
     public class Commands implements CommandExecutor{
@@ -46,9 +70,9 @@ public class ChunkAnalysis extends JavaPlugin {
                 if(args.get(0).equalsIgnoreCase("analyse") && args.size() > 1){
                     Material block;
                     byte data;
-                    String tags;
+                    String tags = null;
                     boolean clip = false;
-                    String pack;
+                    String pack = null;
                     if(args.get(1).contains(":")){
                         String[] bd = args.get(1).split(":");
                         block = Material.getMaterial(bd[0]);
@@ -58,26 +82,82 @@ public class ChunkAnalysis extends JavaPlugin {
                         data = (byte) 0;
                     }
                     if(args.contains("-t")){
-                        int i = args.indexOf("-t");
-                        tags = args.get(i+1);
+                        if(args.contains("-s") && args.contains("-p")){
+                            int i = args.indexOf("-t");
+                            tags = args.get(i+1);
+                        }else{
+                            sender.sendMessage("Cannot search whole map with block flags");
+                            return true;
+                        }
+                    }
+                    if(args.contains("-s") && args.contains("-p")){
+                        sender.sendMessage("Cannot have both clip and pack");
+                        return true;
                     }
                     if(args.contains("-s")){
-                        clip = true;
+                        if(sender instanceof Player){
+                            clip = true;
+                        }else{
+                            sender.sendMessage("Cannot use selection with console!");
+                            return true;
+                        }
+                    }else if(args.contains("-p")){
+                        if(sender instanceof Player){
+                            int i = args.indexOf("-p");
+                            pack = args.get(i+1);
+                        }else{
+                            sender.sendMessage("Cannot use pack param with console!");
+                            return true;
+                        }
                     }
-                    if(args.contains("-p")){
-                        int i = args.indexOf("-p");
-                        pack = args.get(i+1);
+                    sender.sendMessage("Query Results:");
+                    sender.sendMessage("==============");
+                    int count = 0;
+                    if(clip){
+                        Selection sel = worldEdit.getSelection((Player) sender);
+                        for(int x = sel.getMinimumPoint().getBlockX(); x <= sel.getMaximumPoint().getBlockX(); x++){
+                            for(int y = sel.getMinimumPoint().getBlockY(); y <= sel.getMaximumPoint().getBlockY(); y++){
+                                for(int z = sel.getMinimumPoint().getBlockZ(); z <= sel.getMaximumPoint().getBlockZ(); z++){
+                                    Block b = new Location(sel.getWorld(), x, y, z).getBlock();
+                                    if(b.getType().equals(block) && b.getData() == data && (tags != null ? checkFlags(tags, b) : true)){
+                                        sender.sendMessage(" - ("+x+","+y+","+z+")");
+                                        count++;
+                                    }
+                                }
+                            }
+                        }
+                    }else if(pack != null){
+                        
+                        
+                        
+                    }else{
+                        World w = ((Player) sender).getWorld();
+                        for(int cx = minChunk.x; cx <= maxChunk.x; cx++){
+                            for(int cy = minChunk.y; cy <= maxChunk.y; cy++){
+                                ChunkSnapshot c = w.getChunkAt(cx, cy).getChunkSnapshot(true, false, false);
+                                for(int x = 0; x <= 15; x++){
+                                    for(int y = 0; y <= 127; y++){
+                                        for(int z = 0; z <= 15; z++){
+                                            if(c.getBlockTypeId(x, y, z) == block.getId() && c.getBlockData(x, y, z) == data){
+                                                sender.sendMessage(" - ("+(cx*16+x)+","+y+","+(cy*16+z)+")");
+                                                count++;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
-                    
+                    sender.sendMessage(count + "results found");
                 }else if(args.get(0).equalsIgnoreCase("replace")){
                     Material blockFind;
                     byte dataFind;
-                    String tagsFind;
+                    String tagsFind = null;
                     Material blockReplace;
                     byte dataReplace;
-                    String tagsReplace;
+                    String tagsReplace = null;
                     boolean clip = false;
-                    String pack;
+                    String pack = null;
                     int j = 2;
                     for(;j<args.size();j+=2){
                         if(!args.get(j).contains("-")){
@@ -99,28 +179,96 @@ public class ChunkAnalysis extends JavaPlugin {
                         blockReplace = Material.getMaterial(bd[0]);
                         dataReplace = Byte.parseByte(bd[1]);
                     }else{
-                        blockFind = Material.getMaterial(replaceArgs.get(1));
-                        dataFind = (byte) 0;
+                        blockReplace = Material.getMaterial(replaceArgs.get(1));
+                        dataReplace = (byte) 0;
                     }
                     if(findArgs.contains("-t")){
-                        int i = findArgs.indexOf("-t");
-                        tagsFind = findArgs.get(i+1);
+                        if(findArgs.contains("-s") && findArgs.contains("-p")){
+                            int i = findArgs.indexOf("-t");
+                            tagsFind = findArgs.get(i+1);
+                        }else{
+                            sender.sendMessage("Cannot search whole map with block flags");
+                            return true;
+                        }
                     }
                     if(replaceArgs.contains("-t")){
-                        int i = replaceArgs.indexOf("-t");
-                        tagsReplace = replaceArgs.get(i+1);
+                        if(replaceArgs.contains("-s") && replaceArgs.contains("-p")){
+                            int i = replaceArgs.indexOf("-t");
+                            tagsReplace = replaceArgs.get(i+1);
+                        }else{
+                            sender.sendMessage("Cannot search whole map with block flags");
+                            return true;
+                        }
                     }
                     if(args.contains("-s")){
-                        clip = true;
+                        if(sender instanceof Player){
+                            clip = true;
+                        }else{
+                            sender.sendMessage("Cannot use selection with console!");
+                            return true;
+                        }
                     }
                     if(args.contains("-p")){
-                        int i = args.indexOf("-p");
+                        if(sender instanceof Player){
+                            int i = args.indexOf("-p");
                         pack = args.get(i+1);
+                        }else{
+                            sender.sendMessage("Cannot use pack param with console!");
+                            return true;
+                        }
                     }
-                    
+                    int count = 0;
+                    if(clip){
+                        Selection sel = worldEdit.getSelection((Player) sender);
+                        for(int x = sel.getMinimumPoint().getBlockX(); x <= sel.getMaximumPoint().getBlockX(); x++){
+                            for(int y = sel.getMinimumPoint().getBlockY(); y <= sel.getMaximumPoint().getBlockY(); y++){
+                                for(int z = sel.getMinimumPoint().getBlockZ(); z <= sel.getMaximumPoint().getBlockZ(); z++){
+                                    Block b = new Location(sel.getWorld(), x, y, z).getBlock();
+                                    if(b.getType().equals(blockFind) && b.getData() == dataFind && (tagsFind != null ? checkFlags(tagsFind, b) : true)){
+                                        b.setType(blockReplace);
+                                        b.setData(dataReplace, false);
+                                        setFlags(tagsReplace, b);
+                                        count++;
+                                    }
+                                }
+                            }
+                        }
+                    }else if(pack != null){
+                        
+                        
+                        
+                    }else{
+                        World w = ((Player) sender).getWorld();
+                        for(int cx = minChunk.x; cx <= maxChunk.x; cx++){
+                            for(int cy = minChunk.y; cy <= maxChunk.y; cy++){
+                                ChunkSnapshot c = w.getChunkAt(cx, cy).getChunkSnapshot(true, false, false);
+                                for(int x = 0; x <= 15; x++){
+                                    for(int y = 0; y <= 127; y++){
+                                        for(int z = 0; z <= 15; z++){
+                                            if(c.getBlockTypeId(x, y, z) == blockFind.getId() && c.getBlockData(x, y, z) == dataFind){
+                                                Block b = w.getBlockAt(cx*16+x, y, cy*16+z);
+                                                b.setType(blockReplace);
+                                                b.setData(dataReplace, false);
+                                                count++;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    sender.sendMessage(count + "results found");
                 }
             }
             return false;
+        }
+        
+        private boolean checkFlags(String flags, Block block){
+            return false;
+        }
+        
+        private void setFlags(String flags, Block block){
+            
         }
     }
 }

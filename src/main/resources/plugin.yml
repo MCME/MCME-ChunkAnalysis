@@ -3,7 +3,7 @@ main: com.mcmiddleearth.chunkanalysis.ChunkAnalysis
 version: 1
 description: Analysis or modification of chunks in the world
 author: Dallen
-depend: [WorldEdit]
+depend: [WorldEdit, ResourceRegions]
 commands:
   block:
     description: analyse of modify blocks by filter
