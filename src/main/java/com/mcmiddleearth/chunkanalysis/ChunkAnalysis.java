@@ -26,6 +26,7 @@ import java.awt.Rectangle;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -33,6 +34,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import me.dags.resourceregions.region.Region;
 import me.dags.resourceregions.region.RegionManager;
+import org.bukkit.Bukkit;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -81,12 +83,12 @@ public class ChunkAnalysis extends JavaPlugin {
     public class Commands implements CommandExecutor{
 
         @Override
-        public boolean onCommand(CommandSender sender, Command cmd, String label, String[] argz) {
+        public boolean onCommand(final CommandSender sender, Command cmd, String label, String[] argz) {
             List<String> args = Arrays.asList(argz);
             if(args.size() > 0){
                 if(args.get(0).equalsIgnoreCase("analyse") && args.size() > 1){
-                    Material block;
-                    byte data;
+                    final Material block;
+                    final byte data;
                     String tags = null;
                     boolean clip = false;
                     String pack = null;
@@ -132,25 +134,35 @@ public class ChunkAnalysis extends JavaPlugin {
                     }
                     sender.sendMessage("Query Results:");
                     sender.sendMessage("==============");
-                    int count = 0;
+                    final String t = tags;
+                    Runnable r;
                     if(clip){
-                        Selection sel = worldEdit.getSelection((Player) sender);
-                        for(int x = sel.getMinimumPoint().getBlockX(); x <= sel.getMaximumPoint().getBlockX(); x++){
-                            for(int y = sel.getMinimumPoint().getBlockY(); y <= sel.getMaximumPoint().getBlockY(); y++){
-                                for(int z = sel.getMinimumPoint().getBlockZ(); z <= sel.getMaximumPoint().getBlockZ(); z++){
-                                    Block b = new Location(sel.getWorld(), x, y, z).getBlock();
-                                    if(b.getType().equals(block) && b.getData() == data && (tags != null ? checkFlags(tags, b) : true)){
-                                        sender.sendMessage(" - ("+x+","+y+","+z+")");
-                                        count++;
+                        final Selection sel = worldEdit.getSelection((Player) sender);
+                        r = new Runnable(){
+                            @Override
+                            public void run(){
+                                int count = 0;
+                                for(int x = sel.getMinimumPoint().getBlockX(); x <= sel.getMaximumPoint().getBlockX(); x++){
+                                    for(int y = sel.getMinimumPoint().getBlockY(); y <= sel.getMaximumPoint().getBlockY(); y++){
+                                        for(int z = sel.getMinimumPoint().getBlockZ(); z <= sel.getMaximumPoint().getBlockZ(); z++){
+                                            Block b = new Location(sel.getWorld(), x, y, z).getBlock();
+                                            if(b.getType().equals(block) && b.getData() == data && (t != null ? checkFlags(t, b) : true)){
+                                                sender.sendMessage(" - ("+x+","+y+","+z+")");
+                                                count++;
+                                                Thread.yield();
+                                            }
+                                        }
                                     }
                                 }
+                                sender.sendMessage(count + "results found");
                             }
-                        }
+                        };
+                        
                     }else if(pack != null){
                         Region reg = null;
-                        for(Region r : (Set<Region>) forceGet(rm, "regions")){
-                            if(r.getName().equalsIgnoreCase(pack)){
-                                reg=r;
+                        for(Region re : (Set<Region>) forceGet(rm, "regions")){
+                            if(re.getName().equalsIgnoreCase(pack)){
+                                reg=re;
                                 break;
                             }
                         }
@@ -161,43 +173,59 @@ public class ChunkAnalysis extends JavaPlugin {
                         int n = (int) forceGet(rm, "n");
                         int[] xpoints = (int[]) forceGet(rm, "xpoints");
                         int[] zpoints = (int[]) forceGet(rm, "zpoints");
-                        Rectangle bounds = new Polygon(xpoints, zpoints, n).getBounds();
-                        for(int x = bounds.x; x < bounds.x + bounds.width; x++){
-                            for(int z = bounds.y; z < bounds.y + bounds.height; z++){
-                                for(int y = 0; y < 255; y++){
-                                    Block b = new Location(((Player) sender).getWorld(), x, y, z).getBlock();
-                                    if(b.getType().equals(block) && b.getData() == data && (tags != null ? checkFlags(tags, b) : true)){
-                                        sender.sendMessage(" - ("+x+","+y+","+z+")");
-                                        count++;
-                                    }
-                                }
-                            }
-                        }
-                    }else{
-                        World w = ((Player) sender).getWorld();
-                        for(int cx = minChunk.x; cx <= maxChunk.x; cx++){
-                            for(int cy = minChunk.y; cy <= maxChunk.y; cy++){
-                                ChunkSnapshot c = w.getChunkAt(cx, cy).getChunkSnapshot(true, false, false);
-                                for(int x = 0; x <= 15; x++){
-                                    for(int y = 0; y <= 127; y++){
-                                        for(int z = 0; z <= 15; z++){
-                                            if(c.getBlockTypeId(x, y, z) == block.getId() && c.getBlockData(x, y, z) == data){
-                                                sender.sendMessage(" - ("+(cx*16+x)+","+y+","+(cy*16+z)+")");
+                        final Rectangle bounds = new Polygon(xpoints, zpoints, n).getBounds();
+                        r = new Runnable(){
+                            @Override
+                            public void run(){
+                                int count = 0;
+                                for(int x = bounds.x; x < bounds.x + bounds.width; x++){
+                                    for(int z = bounds.y; z < bounds.y + bounds.height; z++){
+                                        for(int y = 0; y < 255; y++){
+                                            Block b = new Location(((Player) sender).getWorld(), x, y, z).getBlock();
+                                            if(b.getType().equals(block) && b.getData() == data && (t != null ? checkFlags(t, b) : true)){
+                                                sender.sendMessage(" - ("+x+","+y+","+z+")");
                                                 count++;
+                                                Thread.yield();
                                             }
                                         }
                                     }
                                 }
+                                sender.sendMessage(count + "results found");
                             }
-                        }
+                        };
+                    }else{
+                        final World w = ((Player) sender).getWorld();
+                        r = new Runnable(){
+                            @Override
+                            public void run(){
+                                int count = 0;
+                                for(int cx = minChunk.x; cx <= maxChunk.x; cx++){
+                                    for(int cy = minChunk.y; cy <= maxChunk.y; cy++){
+                                        ChunkSnapshot c = w.getChunkAt(cx, cy).getChunkSnapshot(true, false, false);
+                                        for(int x = 0; x <= 15; x++){
+                                            for(int y = 0; y <= 127; y++){
+                                                for(int z = 0; z <= 15; z++){
+                                                    if(c.getBlockTypeId(x, y, z) == block.getId() && c.getBlockData(x, y, z) == data){
+                                                        sender.sendMessage(" - ("+(cx*16+x)+","+y+","+(cy*16+z)+")");
+                                                        count++;
+                                                        Thread.yield();
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                sender.sendMessage(count + "results found");
+                            }
+                        };
                     }
-                    sender.sendMessage(count + "results found");
+                    Bukkit.getScheduler().scheduleAsyncDelayedTask(ChunkAnalysis.this, r);
                 }else if(args.get(0).equalsIgnoreCase("replace")){
-                    Material blockFind;
-                    byte dataFind;
+                    final Material blockFind;
+                    final byte dataFind;
                     String tagsFind = null;
-                    Material blockReplace;
-                    byte dataReplace;
+                    final Material blockReplace;
+                    final byte dataReplace;
                     String tagsReplace = null;
                     boolean clip = false;
                     String pack = null;
@@ -260,27 +288,37 @@ public class ChunkAnalysis extends JavaPlugin {
                             return true;
                         }
                     }
-                    int count = 0;
+                    final String tf = tagsFind;
+                    final String tr = tagsReplace;
+                    Runnable r;
                     if(clip){
-                        Selection sel = worldEdit.getSelection((Player) sender);
-                        for(int x = sel.getMinimumPoint().getBlockX(); x <= sel.getMaximumPoint().getBlockX(); x++){
-                            for(int y = sel.getMinimumPoint().getBlockY(); y <= sel.getMaximumPoint().getBlockY(); y++){
-                                for(int z = sel.getMinimumPoint().getBlockZ(); z <= sel.getMaximumPoint().getBlockZ(); z++){
-                                    Block b = new Location(sel.getWorld(), x, y, z).getBlock();
-                                    if(b.getType().equals(blockFind) && b.getData() == dataFind && (tagsFind != null ? checkFlags(tagsFind, b) : true)){
-                                        b.setType(blockReplace);
-                                        b.setData(dataReplace, false);
-                                        setFlags(tagsReplace, b);
-                                        count++;
+                        final Selection sel = worldEdit.getSelection((Player) sender);
+                        r = new Runnable(){
+                            @Override
+                            public void run(){
+                                int count = 0;
+                                for(int x = sel.getMinimumPoint().getBlockX(); x <= sel.getMaximumPoint().getBlockX(); x++){
+                                    for(int y = sel.getMinimumPoint().getBlockY(); y <= sel.getMaximumPoint().getBlockY(); y++){
+                                        for(int z = sel.getMinimumPoint().getBlockZ(); z <= sel.getMaximumPoint().getBlockZ(); z++){
+                                            Block b = new Location(sel.getWorld(), x, y, z).getBlock();
+                                            if(b.getType().equals(blockFind) && b.getData() == dataFind && (tf != null ? checkFlags(tf, b) : true)){
+                                                b.setType(blockReplace);
+                                                b.setData(dataReplace, false);
+                                                setFlags(tr, b);
+                                                count++;
+                                                Thread.yield();
+                                            }
+                                        }
                                     }
                                 }
+                                sender.sendMessage(count + "results found");
                             }
-                        }
+                        };
                     }else if(pack != null){
                         Region reg = null;
-                        for(Region r : (Set<Region>) forceGet(rm, "regions")){
-                            if(r.getName().equalsIgnoreCase(pack)){
-                                reg=r;
+                        for(Region re : (Set<Region>) forceGet(rm, "regions")){
+                            if(re.getName().equalsIgnoreCase(pack)){
+                                reg=re;
                                 break;
                             }
                         }
@@ -291,52 +329,70 @@ public class ChunkAnalysis extends JavaPlugin {
                         int n = (int) forceGet(rm, "n");
                         int[] xpoints = (int[]) forceGet(rm, "xpoints");
                         int[] zpoints = (int[]) forceGet(rm, "zpoints");
-                        Rectangle bounds = new Polygon(xpoints, zpoints, n).getBounds();
-                        for(int x = bounds.x; x < bounds.x + bounds.width; x++){
-                            for(int z = bounds.y; z < bounds.y + bounds.height; z++){
-                                for(int y = 0; y < 255; y++){
-                                    Block b = new Location(((Player) sender).getWorld(), x, y, z).getBlock();
-                                    if(b.getType().equals(blockFind) && b.getData() == dataFind && (tagsFind != null ? checkFlags(tagsFind, b) : true)){
-                                        b.setType(blockReplace);
-                                        b.setData(dataReplace, false);
-                                        setFlags(tagsReplace, b);
-                                        count++;
-                                    }
-                                }
-                            }
-                        }
-                    }else{
-                        World w = ((Player) sender).getWorld();
-                        for(int cx = minChunk.x; cx <= maxChunk.x; cx++){
-                            for(int cy = minChunk.y; cy <= maxChunk.y; cy++){
-                                ChunkSnapshot c = w.getChunkAt(cx, cy).getChunkSnapshot(true, false, false);
-                                for(int x = 0; x <= 15; x++){
-                                    for(int y = 0; y <= 127; y++){
-                                        for(int z = 0; z <= 15; z++){
-                                            if(c.getBlockTypeId(x, y, z) == blockFind.getId() && c.getBlockData(x, y, z) == dataFind){
-                                                Block b = w.getBlockAt(cx*16+x, y, cy*16+z);
+                        final Rectangle bounds = new Polygon(xpoints, zpoints, n).getBounds();
+                        r = new Runnable(){
+                            @Override
+                            public void run(){
+                                int count = 0;
+                                for(int x = bounds.x; x < bounds.x + bounds.width; x++){
+                                    for(int z = bounds.y; z < bounds.y + bounds.height; z++){
+                                        for(int y = 0; y < 255; y++){
+                                            Block b = new Location(((Player) sender).getWorld(), x, y, z).getBlock();
+                                            if(b.getType().equals(blockFind) && b.getData() == dataFind && (tf != null ? checkFlags(tf, b) : true)){
                                                 b.setType(blockReplace);
                                                 b.setData(dataReplace, false);
+                                                setFlags(tr, b);
                                                 count++;
+                                                Thread.yield();
                                             }
                                         }
                                     }
                                 }
+                                sender.sendMessage(count + "results found");
                             }
-                        }
+                        };
+                        
+                    }else{
+                        final World w = ((Player) sender).getWorld();
+                        r = new Runnable(){
+                            @Override
+                            public void run(){
+                                int count = 0;
+                                for(int cx = minChunk.x; cx <= maxChunk.x; cx++){
+                                    for(int cy = minChunk.y; cy <= maxChunk.y; cy++){
+                                        ChunkSnapshot c = w.getChunkAt(cx, cy).getChunkSnapshot(true, false, false);
+                                        for(int x = 0; x <= 15; x++){
+                                            for(int y = 0; y <= 127; y++){
+                                                for(int z = 0; z <= 15; z++){
+                                                    if(c.getBlockTypeId(x, y, z) == blockFind.getId() && c.getBlockData(x, y, z) == dataFind){
+                                                        Block b = w.getBlockAt(cx*16+x, y, cy*16+z);
+                                                        b.setType(blockReplace);
+                                                        b.setData(dataReplace, false);
+                                                        count++;
+                                                        Thread.yield();
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                sender.sendMessage(count + "results found");
+                            }
+                        };
                     }
-                    sender.sendMessage(count + "results found");
+                    Bukkit.getScheduler().scheduleSyncDelayedTask(ChunkAnalysis.this, r, 1);
                 }
             }
             return false;
         }
         
         private boolean checkFlags(String flags, Block block){
+            //TODO: add this
             return false;
         }
         
         private void setFlags(String flags, Block block){
-            
+            //TODO: add this
         }
         
         private Object forceGet(Object o, String name){
