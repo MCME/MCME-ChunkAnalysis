@@ -28,6 +28,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
@@ -154,7 +155,7 @@ public class ChunkAnalysis extends JavaPlugin {
                                         }
                                     }
                                 }
-                                sender.sendMessage(count + "results found");
+                                sender.sendMessage(count + " results found");
                             }
                         };
                         
@@ -215,7 +216,7 @@ public class ChunkAnalysis extends JavaPlugin {
                                         }
                                     }
                                 }
-                                sender.sendMessage(count + "results found");
+                                sender.sendMessage(count + " results found");
                             }
                         };
                     }
@@ -229,6 +230,7 @@ public class ChunkAnalysis extends JavaPlugin {
                     String tagsReplace = null;
                     boolean clip = false;
                     String pack = null;
+                    boolean sw = false;
                     int j = 2;
                     for(;j<args.size();j+=2){
                         if(!args.get(j).contains("-")){
@@ -288,8 +290,12 @@ public class ChunkAnalysis extends JavaPlugin {
                             return true;
                         }
                     }
+                    if(args.contains("-d")){
+                        sw = true;
+                    }
                     final String tf = tagsFind;
                     final String tr = tagsReplace;
+                    final boolean swap = sw;
                     Runnable r;
                     if(clip){
                         final Selection sel = worldEdit.getSelection((Player) sender);
@@ -306,12 +312,17 @@ public class ChunkAnalysis extends JavaPlugin {
                                                 b.setData(dataReplace, false);
                                                 setFlags(tr, b);
                                                 count++;
-                                                Thread.yield();
+                                            }else if(b.getType().equals(blockReplace) && b.getData() == dataReplace && (tr != null ? checkFlags(tr, b) : true) && swap){
+                                                b.setType(blockFind);
+                                                b.setData(dataFind, false);
+                                                setFlags(tf, b);
+                                                count++;
                                             }
+                                            Thread.yield();
                                         }
                                     }
                                 }
-                                sender.sendMessage(count + "results found");
+                                sender.sendMessage(count + " results found");
                             }
                         };
                     }else if(pack != null){
@@ -343,12 +354,17 @@ public class ChunkAnalysis extends JavaPlugin {
                                                 b.setData(dataReplace, false);
                                                 setFlags(tr, b);
                                                 count++;
-                                                Thread.yield();
+                                            }else if(b.getType().equals(blockReplace) && b.getData() == dataReplace && (tr != null ? checkFlags(tr, b) : true) && swap){
+                                                b.setType(blockFind);
+                                                b.setData(dataFind, false);
+                                                setFlags(tf, b);
+                                                count++;
                                             }
+                                            Thread.yield();
                                         }
                                     }
                                 }
-                                sender.sendMessage(count + "results found");
+                                sender.sendMessage(count + " results found");
                             }
                         };
                         
@@ -369,14 +385,19 @@ public class ChunkAnalysis extends JavaPlugin {
                                                         b.setType(blockReplace);
                                                         b.setData(dataReplace, false);
                                                         count++;
-                                                        Thread.yield();
+                                                    }else if(c.getBlockTypeId(x, y, z) == blockReplace.getId() && c.getBlockData(x, y, z) == dataReplace && swap){
+                                                        Block b = w.getBlockAt(cx*16+x, y, cy*16+z);
+                                                        b.setType(blockFind);
+                                                        b.setData(dataFind, false);
+                                                        count++;
                                                     }
+                                                    Thread.yield();
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                sender.sendMessage(count + "results found");
+                                sender.sendMessage(count + " results found");
                             }
                         };
                     }

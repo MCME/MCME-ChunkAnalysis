@@ -9,4 +9,4 @@ commands:
     description: analyse of modify blocks by filter
     usage: |
             /block analyse <Block ID>[:data] -t [json tags] -p [pack] -s
-            /block replace <Find ID>[:find data] -t [find tags] <Replace ID>[:replace data] -t [replace tags] -s -p [pack]
+            /block replace <Find ID>[:find data] -t [find tags] <Replace ID>[:replace data] -t [replace tags] -s -p [pack] -d
