@@ -1,24 +1,25 @@
 /*
  * This file is part of ChunkAnalysis.
  * 
- * EnforcerSuite is free software: you can redistribute it and/or modify
+ * ChunkAnalysis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  * 
- * EnforcerSuite is distributed in the hope that it will be useful,
+ * ChunkAnalysis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
  * You should have received a copy of the GNU General Public License
- * along with EnforcerSuite.  If not, see <http://www.gnu.org/licenses/>.
+ * along with ChunkAnalysis.  If not, see <http://www.gnu.org/licenses/>.
  * 
  * 
  */
 package com.mcmiddleearth.chunkanalysis;
 
 import com.sk89q.worldedit.bukkit.WorldEditPlugin;
+import com.sk89q.worldedit.bukkit.selections.CuboidSelection;
 import com.sk89q.worldedit.bukkit.selections.Selection;
 import java.awt.Point;
 import java.awt.Polygon;
@@ -26,13 +27,12 @@ import java.awt.Rectangle;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import lombok.Getter;
 import me.dags.resourceregions.region.Region;
 import me.dags.resourceregions.region.RegionManager;
 import org.bukkit.Bukkit;
@@ -49,7 +49,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 /**
  *
- * @author donoa_000
+ * @author donoa_000, Eriol_Eandur
  */
 public class ChunkAnalysis extends JavaPlugin {
     
@@ -60,8 +60,12 @@ public class ChunkAnalysis extends JavaPlugin {
     
     private static RegionManager rm = null;
     
+    @Getter
+    private static JavaPlugin instance;
+    
     @Override
     public void onEnable(){
+        instance = this;
         this.getCommand("block").setExecutor(new Commands());
         worldEdit = (WorldEditPlugin) this.getServer().getPluginManager().getPlugin("WorldEdit");
         try {
@@ -87,6 +91,10 @@ public class ChunkAnalysis extends JavaPlugin {
         public boolean onCommand(final CommandSender sender, Command cmd, String label, String[] argz) {
             List<String> args = Arrays.asList(argz);
             if(args.size() > 0){
+                if(args.get(0).equalsIgnoreCase("tps") && args.size()>1) {
+                    JobManager.setServerTps(Integer.parseInt(args.get(1)));
+                    return true;
+                }
                 if(args.get(0).equalsIgnoreCase("analyse") && args.size() > 1){
                     final Material block;
                     final byte data;
@@ -231,7 +239,7 @@ public class ChunkAnalysis extends JavaPlugin {
                     boolean clip = false;
                     String pack = null;
                     boolean sw = false;
-                    int j = 2;
+                    /*int j = 2;
                     for(;j<args.size();j+=2){
                         if(!args.get(j).contains("-")){
                             break;
@@ -243,18 +251,18 @@ public class ChunkAnalysis extends JavaPlugin {
                         String[] bd = findArgs.get(1).split(":");
                         blockFind = Material.getMaterial(bd[0]);
                         dataFind = Byte.parseByte(bd[1]);
-                    }else{
-                        blockFind = Material.getMaterial(findArgs.get(1));
+                    }else{*/
+                        blockFind = Material.getMaterial(Integer.parseInt(args.get(1)));
                         dataFind = (byte) 0;
-                    }
+                    /*}
                     if(replaceArgs.get(1).contains(":")){
                         String[] bd = replaceArgs.get(1).split(":");
                         blockReplace = Material.getMaterial(bd[0]);
                         dataReplace = Byte.parseByte(bd[1]);
-                    }else{
-                        blockReplace = Material.getMaterial(replaceArgs.get(1));
+                    }else{*/
+                        blockReplace = Material.getMaterial(Integer.parseInt(args.get(2)));
                         dataReplace = (byte) 0;
-                    }
+                    /*}
                     if(findArgs.contains("-t")){
                         if(findArgs.contains("-s") && findArgs.contains("-p")){
                             int i = findArgs.indexOf("-t");
@@ -272,7 +280,7 @@ public class ChunkAnalysis extends JavaPlugin {
                             sender.sendMessage("Cannot search whole map with block flags");
                             return true;
                         }
-                    }
+                    }*/
                     if(args.contains("-s")){
                         if(sender instanceof Player){
                             clip = true;
@@ -303,6 +311,7 @@ public class ChunkAnalysis extends JavaPlugin {
                             @Override
                             public void run(){
                                 int count = 0;
+Logger.getGlobal().info("1");
                                 for(int x = sel.getMinimumPoint().getBlockX(); x <= sel.getMaximumPoint().getBlockX(); x++){
                                     for(int y = sel.getMinimumPoint().getBlockY(); y <= sel.getMaximumPoint().getBlockY(); y++){
                                         for(int z = sel.getMinimumPoint().getBlockZ(); z <= sel.getMaximumPoint().getBlockZ(); z++){
@@ -345,6 +354,7 @@ public class ChunkAnalysis extends JavaPlugin {
                             @Override
                             public void run(){
                                 int count = 0;
+Logger.getGlobal().info("2");
                                 for(int x = bounds.x; x < bounds.x + bounds.width; x++){
                                     for(int z = bounds.y; z < bounds.y + bounds.height; z++){
                                         for(int y = 0; y < 255; y++){
@@ -370,7 +380,13 @@ public class ChunkAnalysis extends JavaPlugin {
                         
                     }else{
                         final World w = ((Player) sender).getWorld();
-                        r = new Runnable(){
+Logger.getGlobal().info("3");
+                        final Selection sel = worldEdit.getSelection((Player) sender);
+                        JobActionReplace action = new JobActionReplace(Integer.parseInt(args.get(1)),-1,
+                                                                       Integer.parseInt(args.get(2)),-1);
+                        JobManager.addJob(new CuboidJob((CuboidSelection)sel,action));
+                        return true;
+                        /*r = new Runnable(){
                             @Override
                             public void run(){
                                 int count = 0;
@@ -399,7 +415,7 @@ public class ChunkAnalysis extends JavaPlugin {
                                 }
                                 sender.sendMessage(count + " results found");
                             }
-                        };
+                        };*/
                     }
                     Bukkit.getScheduler().scheduleSyncDelayedTask(ChunkAnalysis.this, r, 1);
                 }
