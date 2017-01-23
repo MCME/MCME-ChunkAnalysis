@@ -20,6 +20,8 @@ package com.mcmiddleearth.chunkanalysis;
 
 import de.schlichtherle.io.File;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.Setter;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -35,38 +37,69 @@ public abstract class Job {
     
     private File statsFile;
     
+    @Getter
+    protected int jobSize;
+    
+    @Getter
+    protected int chunksDone;
+    
+    @Getter
+    protected Vector current;
+    
     private BukkitTask jobTask;
+    
+    @Setter
+    private float taskSize;
     
     protected boolean taskCancelled;
 
+    @Getter
     protected JobAction action;
     
     public Job(JobAction action) {
         this.action = action;
     }
-    public boolean isTaskFinished() {
-        return jobTask == null || !(Bukkit.getScheduler().isCurrentlyRunning(jobTask.getTaskId())
+    
+    public boolean isTaskPending() {
+        return jobTask != null && (Bukkit.getScheduler().isCurrentlyRunning(jobTask.getTaskId())
                    || Bukkit.getScheduler().isQueued(jobTask.getTaskId()));
     }
     
     public abstract boolean isFinished();
     
-    public void startTask(int taskSize) {
-        if(isTaskFinished()) {
+    public void startTask() {
+        if(!isTaskPending()) {
             taskCancelled=false;
-            jobTask = createJobTask(taskSize).runTask(ChunkAnalysis.getInstance());
+            //jobTask = createJobTask(taskSize).runTask(ChunkAnalysis.getInstance());
+            jobTask = new BukkitRunnable() {
+                @Override
+                public void run() {
+                    DevUtil.log(6,"Startin job with size: "+taskSize);
+                    int taskSizeInt = Math.round(taskSize);
+                    if(taskSizeInt>0) {
+                        executeTask(taskSizeInt);
+                    }
+                    if(isFinished()) {
+                        cancel();
+                    }
+                }
+            }.runTaskTimer(ChunkAnalysis.getInstance(), 0, 1);
         }
     }
     
-    protected abstract BukkitRunnable createJobTask(int askSize);
+    //protected abstract BukkitRunnable createJobTask(int askSize);
     
     public void stopTask() {
-        taskCancelled = true;
+        if(!taskCancelled) {
+            taskCancelled = true;
+            jobTask.cancel();
+        }
     }
     
     protected void saveProgress(Vector last) {
         
     }
     
+    protected abstract void executeTask(int size);
 
 }

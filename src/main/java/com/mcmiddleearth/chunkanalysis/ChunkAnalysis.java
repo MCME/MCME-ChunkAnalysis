@@ -39,6 +39,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
@@ -91,8 +92,64 @@ public class ChunkAnalysis extends JavaPlugin {
         public boolean onCommand(final CommandSender sender, Command cmd, String label, String[] argz) {
             List<String> args = Arrays.asList(argz);
             if(args.size() > 0){
+                if(args.get(0).equalsIgnoreCase("dev")) {
+                    if(argz.length>1 && argz[1].equalsIgnoreCase("true")) {
+                        DevUtil.setConsoleOutput(true);
+                        showDetails(sender);
+                        return true;
+                    }
+                    else if(argz.length>1 && argz[1].equalsIgnoreCase("false")) {
+                        DevUtil.setConsoleOutput(false);
+                        showDetails(sender);
+                        return true;
+                    }
+                    else if(argz.length>1) {
+                        try {
+                            int level = Integer.parseInt(argz[1]);
+                            DevUtil.setLevel(level);
+                            showDetails(sender);
+                            return true;
+                        }
+                        catch(NumberFormatException e){};
+                    }
+                    if(sender instanceof Player) {
+                        Player player = (Player) sender;
+                        if(argz.length>1 && argz[1].equalsIgnoreCase("r")) {
+                            DevUtil.remove(player);
+                            showDetails(sender);
+                            return true;
+                        }
+                        DevUtil.add(player);
+                        showDetails(sender);
+                    }
+                    return true;
+                }
+                if(args.get(0).equalsIgnoreCase("suspend")) {
+                    JobManager.getJobScheduler().setSuspended(true);
+                    return true;
+                }
+                if(args.get(0).equalsIgnoreCase("resume")) {
+                    JobManager.getJobScheduler().setSuspended(false);
+                    return true;
+                }
+                if(args.get(0).equalsIgnoreCase("cancel")) {
+                    JobManager.getJobScheduler().setCancel(true);
+                    return true;
+                }
                 if(args.get(0).equalsIgnoreCase("tps") && args.size()>1) {
-                    JobManager.setServerTps(Integer.parseInt(args.get(1)));
+                    JobManager.getJobScheduler().setServerTps(Integer.parseInt(args.get(1)));
+                    return true;
+                }
+                if(args.get(0).equalsIgnoreCase("i") && args.size()>1) {
+                    JobManager.getJobScheduler().setI(Float.parseFloat(args.get(1)));
+                    return true;
+                }
+                if(args.get(0).equalsIgnoreCase("d") && args.size()>1) {
+                    JobManager.getJobScheduler().setD(Float.parseFloat(args.get(1)));
+                    return true;
+                }
+                if(args.get(0).equalsIgnoreCase("v") && args.size()>1) {
+                    JobManager.getJobScheduler().setV(Float.parseFloat(args.get(1)));
                     return true;
                 }
                 if(args.get(0).equalsIgnoreCase("analyse") && args.size() > 1){
@@ -443,4 +500,13 @@ Logger.getGlobal().info("3");
             return null;
         }
     }
+    
+    private void showDetails(CommandSender cs) {
+        cs.sendMessage("DevUtil: Level - "+DevUtil.getLevel()+"; Console - "+DevUtil.isConsoleOutput()+"; ");
+        cs.sendMessage("         Developer:");
+        for(OfflinePlayer player:DevUtil.getDeveloper()) {
+        cs.sendMessage("                "+player.getName());
+        }
+    }
+
 }

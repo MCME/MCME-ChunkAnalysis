@@ -20,7 +20,7 @@ package com.mcmiddleearth.chunkanalysis;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Logger;
+import lombok.Getter;
 import lombok.Setter;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitTask;
@@ -31,20 +31,20 @@ import org.bukkit.scheduler.BukkitTask;
  */
 public class JobManager {
     
-    private static BukkitTask scheduler;
+    private static BukkitTask schedulerTask;
+    
+    @Getter
+    private static JobScheduler jobScheduler;
     
     private static final List<Job> pendingJobs = new ArrayList<>();
-    
-    @Setter
-    private static int serverTps = 15;
     
     public static void addJob(Job newJob) {
         pendingJobs.add(newJob);
         if(!isSchedulerTaskRunning()) {
-Logger.getGlobal().info("start scheduler with tps "+serverTps);
-            JobScheduler jobScheduler = new JobScheduler(pendingJobs);
-            jobScheduler.setServerTps(serverTps);
-            scheduler=jobScheduler.runTaskAsynchronously(ChunkAnalysis.getInstance());
+            DevUtil.log("start scheduler with tps "+15);
+            jobScheduler = new JobScheduler(pendingJobs);
+            jobScheduler.setServerTps(15);
+            schedulerTask=jobScheduler.runTaskAsynchronously(ChunkAnalysis.getInstance());
         }
     }
    
@@ -53,8 +53,8 @@ Logger.getGlobal().info("start scheduler with tps "+serverTps);
     }
     
     private static boolean isSchedulerTaskRunning() {
-        return scheduler!=null 
-               && Bukkit.getScheduler().isCurrentlyRunning(scheduler.getTaskId());
+        return schedulerTask!=null 
+               && Bukkit.getScheduler().isCurrentlyRunning(schedulerTask.getTaskId());
     }
     
 }
