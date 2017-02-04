@@ -1,0 +1,305 @@
+/*
+ * Copyright (C) 2016 MCME
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+package com.mcmiddleearth.chunkanalysis.util;
+
+import com.mcmiddleearth.chunkanalysis.job.Job;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import lombok.Getter;
+import org.bukkit.util.Vector;
+import org.mariadb.jdbc.MySQLDataSource;
+
+/**
+ *
+ * @author Eriol_Eandur
+ */
+public class DBUtil {
+
+    private static String dbUser;
+    private static String dbPassword;
+    
+    private static MySQLDataSource dataBase;
+    
+    private static Connection dbConnection;
+    
+    private static PreparedStatement logJobCreate;
+    private static PreparedStatement logJobCoord;
+    private static PreparedStatement logBlockIds;
+    private static PreparedStatement logJobStart;
+    private static PreparedStatement logBlock;
+    private static PreparedStatement logChunk;
+    private static PreparedStatement deleteJob;
+    private static PreparedStatement deleteJobCoords;
+    private static PreparedStatement deleteJobBlocks;
+    
+    private static PreparedStatement getJobs;
+    private static PreparedStatement getJobCoords;
+    private static PreparedStatement getBlockIds;
+    private static PreparedStatement getJobIds;
+    
+    @Getter
+    private static boolean connected = false;
+    
+    public static void init(String ip, int port, String dbName, String newDbUser, String newDbPassword){
+        dataBase = new MySQLDataSource(ip,port,dbName);
+        dbUser = newDbUser;
+        dbPassword = newDbPassword;
+        connect();
+    }
+        
+    public static void logJobCreation(Job job) {
+        if(isConnected()) {
+            try {
+                logJobCreate.setInt(1,job.getId());
+                logJobCreate.setString(2,job.getOwner().toString());
+                logJobCreate.setString(3,job.getClass().getName());
+                logJobCreate.setString(4,job.getAction().getClass().getName());
+                logJobCreate.setString(5,job.getWorld().getName());
+                logJobCreate.executeUpdate();
+                for(int i=0;i<job.getCoords().length;i++) {
+                    Vector coord = job.getCoords()[i];
+                    logJobCoord.setInt(1, coord.getBlockX());
+                    logJobCoord.setInt(2, coord.getBlockY());
+                    logJobCoord.setInt(3, coord.getBlockZ());
+                    logJobCoord.setInt(4, job.getId());
+                    logJobCoord.setInt(5, i);
+                    logJobCoord.executeUpdate();
+                }
+                for(int i=0;i<job.getAction().getBlockIds().length;i++) {
+                    int[] blockId = job.getAction().getBlockIds()[i];
+                    logBlockIds.setInt(1, blockId[0]);
+                    logBlockIds.setInt(2, blockId[1]);
+                    logBlockIds.setInt(3, job.getId());
+                    logBlockIds.setInt(4, i);
+                    logBlockIds.executeUpdate();
+                }
+            } catch (SQLException ex) {
+                connected = false;
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+
+    public static void logBlock(Job job, int x, int y, int z, long processed, long found) {
+        if(isConnected()) {
+            try {
+                logBlock.setInt(1,x);
+                logBlock.setInt(2,y);
+                logBlock.setInt(3,z);
+                logBlock.setLong(4, processed);
+                logBlock.setLong(5, found);
+                logBlock.setInt(6,job.getId());
+                logBlock.executeUpdate();
+            } catch (SQLException ex) {
+                connected = false;
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+
+    public static void logChunk(Job job, int chunkX, int chunkZ, int blockX, int blockY, int blockZ,
+                                long processed, long found) {
+        if(isConnected()) {
+            try {
+                logChunk.setInt(1,chunkX);
+                logChunk.setInt(2,chunkZ);
+                logChunk.setInt(3,blockX);
+                logChunk.setInt(4,blockY);
+                logChunk.setInt(5,blockZ);
+                logChunk.setLong(6, processed);
+                logChunk.setLong(7, found);
+                logChunk.setInt(8,job.getId());
+                logChunk.executeUpdate();
+            } catch (SQLException ex) {
+                connected = false;
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+
+    public static void logStartTime(Job job) {
+        if(isConnected()) {
+            try {
+                logJobStart.setTimestamp(1,new Timestamp(job.getStartTime()));
+                logJobStart.setInt(2,job.getId());
+                logJobStart.executeUpdate();
+            } catch (SQLException ex) {
+                connected = false;
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+    
+    public static void deleteJob(Job job) {
+        if(isConnected()) {
+            try {
+                deleteJob.setInt(1,job.getId());
+                deleteJob.executeUpdate();
+                deleteJobCoords.setInt(1,job.getId());
+                deleteJobCoords.executeUpdate();
+                deleteJobBlocks.setInt(1,job.getId());
+                deleteJobBlocks.executeUpdate();
+            } catch (SQLException ex) {
+                connected = false;
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+    
+    public static int[] getJobIds() {
+        if(isConnected()) {
+            try {
+                ResultSet jobIdData =getJobIds.executeQuery();
+                jobIdData.last();
+                int[] jobIds = new int[jobIdData.getRow()];
+                for(int i=0; i<jobIds.length;i++) {
+                    jobIdData.absolute(i+1);
+                    jobIds[i]=jobIdData.getInt(1);
+                }
+                return jobIds;
+            } catch (SQLException ex) {
+                connected = false;
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return new int[0];
+    }
+    
+    public static List<Job> loadJobs() {
+        if(isConnected()) {
+            try {
+                
+                ResultSet jobData = getJobs.executeQuery();
+                if(jobData.first()) {
+                    List<Job> jobs = new ArrayList<>();
+                    while(!jobData.isAfterLast()) {
+                        String type = jobData.getString("jobType");
+                        String actionType = jobData.getString("actionType");
+                        String world = jobData.getString("world");
+                        int id = jobData.getInt("jobID");
+                        DevUtil.log("loading job Id "+id);
+                        Vector currentChunk = new Vector(jobData.getInt("chunkX"),0,
+                                                         jobData.getInt("chunkZ"));
+                        Vector currentBlock = new Vector(jobData.getInt("x"),
+                                                         jobData.getInt("y"),
+                                                         jobData.getInt("z"));
+                        getJobCoords.setInt(1, id);
+                        ResultSet coordData = getJobCoords.executeQuery();
+                        coordData.last();
+                        Vector[] jobCoords = new Vector[coordData.getRow()];
+                        for(int i = 1; i<=jobCoords.length;i++) {
+                            coordData.absolute(i);
+                            jobCoords[coordData.getInt("coordID")] = new Vector(coordData.getInt("x"),
+                                                                        coordData.getInt("y"),
+                                                                        coordData.getInt("z"));
+                        }
+                        getBlockIds.setInt(1, id);
+                        ResultSet blockData = getBlockIds.executeQuery();
+                        blockData.last();
+                        int[][] blockIds = new int[coordData.getRow()][];
+                        for(int i = 1; i<=blockIds.length;i++) {
+                            blockData.absolute(i);
+                            blockIds[blockData.getInt("index")] = new int[]{blockData.getInt("ID"),
+                                                                            blockData.getInt("DV")};
+                        }
+                        UUID uuid = UUID.fromString(jobData.getString("owner"));
+                        long startTime = jobData.getTimestamp("startTime").getTime();
+                        long processed = jobData.getLong("processed");
+                        long found = jobData.getLong("found");
+                        try {
+                            Class jobClass = Class.forName(type);
+                            Method jobCreator = jobClass.getMethod("createJob", new Class[]{int.class, 
+                                                                                             world.getClass(),
+                                                                                             uuid.getClass(),
+                                                                                             jobCoords.getClass(),
+                                                                                             actionType.getClass(),
+                                                                                             blockIds.getClass(),
+                                                                                             currentChunk.getClass(),
+                                                                                             currentBlock.getClass(),
+                                                                                             long.class,
+                                                                                             long.class,
+                                                                                             long.class});
+                            Job job = (Job) jobCreator.invoke(null,id,world,uuid,jobCoords,actionType,blockIds,
+                                                              currentChunk, currentBlock, startTime, processed, found);
+                            jobs.add(job);
+                        } catch (IllegalAccessException | InvocationTargetException | 
+                                 ClassNotFoundException | NoSuchMethodException | SecurityException ex) {
+                            Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+                        }
+                        jobData.next();
+                    }
+                    return jobs;
+                }
+            } catch (SQLException ex) {
+                connected = false;
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return new ArrayList<>();
+    }
+    
+    public static boolean checkConnection() {
+        try {
+            if(connected && dbConnection.isValid(1)) {
+                connected = true;
+                return true;
+            } else {
+                throw new SQLException();
+            }
+        } catch (SQLException ex) {
+            connected = false;
+            connect();
+            return isConnected();
+        }
+    }
+    
+    private static void connect() {
+        try {
+            dbConnection = dataBase.getConnection(dbUser, dbPassword);
+            
+            logJobCreate = dbConnection.prepareStatement("INSERT INTO jobs VALUES (?,?,?,0,0,0,NULL,NULL,0,0,0,?,?)");
+            logJobCoord = dbConnection.prepareStatement("INSERT INTO jobcoords VALUES (?,?,?,?,?)");
+            logBlockIds = dbConnection.prepareStatement("INSERT INTO blockid VALUES (?,?,?,?)");
+            logJobStart = dbConnection.prepareStatement("UPDATE jobs SET startTime = ? WHERE jobID = ?");
+            logBlock = dbConnection.prepareStatement("UPDATE jobs SET x = ?, y = ?, z = ?,"
+                                                     + " processed = ?, found = ? WHERE jobID = ?");
+            logChunk = dbConnection.prepareStatement("UPDATE jobs SET chunkX = ?, chunkZ = ?, x = ?, y = ?, z = ?,"
+                                                     +" processed = ?, found = ? WHERE jobID = ?");
+            deleteJob = dbConnection.prepareStatement("DELETE FROM jobs WHERE jobID = ?");
+            deleteJobCoords = dbConnection.prepareStatement("DELETE FROM jobcoords WHERE jobID = ?");
+            deleteJobBlocks = dbConnection.prepareStatement("DELETE FROM blockid WHERE jobID = ?");
+            getJobs = dbConnection.prepareStatement("SELECT * FROM jobs");
+            getJobCoords = dbConnection.prepareStatement("SELECT * FROM jobcoords WHERE jobID = ?");
+            getBlockIds = dbConnection.prepareStatement("SELECT * FROM blockid WHERE jobID = ?");
+            getJobIds = dbConnection.prepareStatement("SELECT jobID FROM blockid");
+            connected = true;
+        } catch (SQLException ex) {
+            connected = false;
+            Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, "Connection to DB failed", ex);
+        }
+    }
+}

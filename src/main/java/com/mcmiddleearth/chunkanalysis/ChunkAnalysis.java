@@ -18,6 +18,10 @@
  */
 package com.mcmiddleearth.chunkanalysis;
 
+import com.mcmiddleearth.chunkanalysis.util.DevUtil;
+import com.mcmiddleearth.chunkanalysis.job.action.JobActionReplace;
+import com.mcmiddleearth.chunkanalysis.job.CuboidJob;
+import com.mcmiddleearth.chunkanalysis.util.DBUtil;
 import com.sk89q.worldedit.bukkit.WorldEditPlugin;
 import com.sk89q.worldedit.bukkit.selections.CuboidSelection;
 import com.sk89q.worldedit.bukkit.selections.Selection;
@@ -67,6 +71,8 @@ public class ChunkAnalysis extends JavaPlugin {
     @Override
     public void onEnable(){
         instance = this;
+        DevUtil.setLevel(2);
+        DBUtil.init();
         this.getCommand("block").setExecutor(new Commands());
         worldEdit = (WorldEditPlugin) this.getServer().getPluginManager().getPlugin("WorldEdit");
         try {
@@ -79,6 +85,23 @@ public class ChunkAnalysis extends JavaPlugin {
         this.saveDefaultConfig();
         maxChunk = confToPoint("maxChunk");
         minChunk = confToPoint("minChunk");
+        JobManager.init();
+    }
+    
+    @Override
+    public void onDisable(){
+        if(JobManager.isSchedulerTaskRunning()) {
+            JobManager.getJobScheduler().setDisable(true);
+            DevUtil.log("Disabling async job scheduler.");
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException ex) {
+                Logger.getLogger(ChunkAnalysis.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            if(JobManager.isSchedulerTaskRunning()) {
+                DevUtil.log("Failed to disable async job scheduler, please restart the server.");
+            }
+        }
     }
     
     private Point confToPoint(String conf){
@@ -439,9 +462,11 @@ Logger.getGlobal().info("2");
                         final World w = ((Player) sender).getWorld();
 Logger.getGlobal().info("3");
                         final Selection sel = worldEdit.getSelection((Player) sender);
-                        JobActionReplace action = new JobActionReplace(Integer.parseInt(args.get(1)),-1,
-                                                                       Integer.parseInt(args.get(2)),-1);
-                        JobManager.addJob(new CuboidJob((CuboidSelection)sel,action));
+                        int[][] data = new int[][]{{Integer.parseInt(args.get(1)),-1},{
+                                                                       Integer.parseInt(args.get(2)),-1}};
+                        JobActionReplace action = new JobActionReplace(data,0,0);
+                        JobManager.addJob(new CuboidJob(((Player)sender).getUniqueId(),(CuboidSelection)sel,action));
+                        MessageManager.addListeningPlayer(((Player)sender));
                         return true;
                         /*r = new Runnable(){
                             @Override

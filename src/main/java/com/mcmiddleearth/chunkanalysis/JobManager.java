@@ -18,10 +18,12 @@
  */
 package com.mcmiddleearth.chunkanalysis;
 
+import com.mcmiddleearth.chunkanalysis.util.DevUtil;
+import com.mcmiddleearth.chunkanalysis.job.Job;
+import com.mcmiddleearth.chunkanalysis.util.DBUtil;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Getter;
-import lombok.Setter;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -36,12 +38,24 @@ public class JobManager {
     @Getter
     private static JobScheduler jobScheduler;
     
-    private static final List<Job> pendingJobs = new ArrayList<>();
+    private static List<Job> pendingJobs = new ArrayList<>();
     
+    public static void init() {
+        pendingJobs = DBUtil.loadJobs();
+        if(pendingJobs.size()>0) {
+            startScheduler();
+        }
+    }
     public static void addJob(Job newJob) {
         pendingJobs.add(newJob);
+        startScheduler();
+    }
+    
+    private static void startScheduler() {
         if(!isSchedulerTaskRunning()) {
             DevUtil.log("start scheduler with tps "+15);
+            boolean dbConnected = DBUtil.checkConnection();
+            DevUtil.log("Database connected: "+dbConnected);
             jobScheduler = new JobScheduler(pendingJobs);
             jobScheduler.setServerTps(15);
             schedulerTask=jobScheduler.runTaskAsynchronously(ChunkAnalysis.getInstance());
@@ -52,9 +66,10 @@ public class JobManager {
         pendingJobs.remove(cancelJob);
     }
     
-    private static boolean isSchedulerTaskRunning() {
+    public static boolean isSchedulerTaskRunning() {
         return schedulerTask!=null 
-               && Bukkit.getScheduler().isCurrentlyRunning(schedulerTask.getTaskId());
+               && (Bukkit.getScheduler().isCurrentlyRunning(schedulerTask.getTaskId())
+                   || Bukkit.getScheduler().isQueued(schedulerTask.getTaskId()));
     }
     
 }

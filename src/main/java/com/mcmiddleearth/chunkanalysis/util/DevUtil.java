@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package com.mcmiddleearth.chunkanalysis;
+package com.mcmiddleearth.chunkanalysis.util;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +36,7 @@ public class DevUtil {
     private static List<UUID> developer = new ArrayList<>();
     
     private static final String PREFIX = ""+ChatColor.BOLD+ChatColor.GOLD;
-    private static final String PLUGIN = "[ATP] ";
+    private static final String PLUGIN = "[ChunkAnalyis] ";
     
     @Setter
     @Getter

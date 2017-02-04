@@ -16,7 +16,7 @@
  * 
  * 
  */
-package com.mcmiddleearth.chunkanalysis;
+package com.mcmiddleearth.chunkanalysis.job.action;
 
 import lombok.Getter;
 import org.bukkit.block.Block;
@@ -25,14 +25,24 @@ import org.bukkit.block.Block;
  *
  * @author Eriol_Eandur
  */
-public class JobAction {
+public abstract class JobAction {
     
     @Getter
-    private int processedBlocks=0;
+    private long processedBlocks=0;
+    
+    @Getter
+    protected long foundBlocks=0;
+    
+    public JobAction(long processed, long found) {
+        processedBlocks = processed;   
+        foundBlocks = found;
+    }
     
     public void execute(Block block) {
         processedBlocks++;
     }
+
+    public abstract String statMessage();
     
-    
+    public abstract int[][] getBlockIds();
 }

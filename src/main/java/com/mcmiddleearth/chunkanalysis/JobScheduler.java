@@ -18,11 +18,15 @@
  */
 package com.mcmiddleearth.chunkanalysis;
 
+import com.mcmiddleearth.chunkanalysis.util.DevUtil;
+import com.mcmiddleearth.chunkanalysis.job.action.JobActionReplace;
+import com.mcmiddleearth.chunkanalysis.job.Job;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import lombok.Setter;
 import org.bukkit.Bukkit;
+import org.bukkit.World;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -32,13 +36,7 @@ import org.bukkit.scheduler.BukkitTask;
  */
 public class JobScheduler extends BukkitRunnable {
         
-    private final int START_TASK_SIZE = 10;
-    
-    //private int serverTps = 15;
-    
-    //private final int serverTpsVar = 1;
-    
-    //private final int maxMissingTicks = 3;
+    private final int START_TASK_SIZE = 1;
     
     @Setter
     float i = 0;
@@ -51,15 +49,16 @@ public class JobScheduler extends BukkitRunnable {
     private boolean suspended;
     
     @Setter
-    private boolean cancel;
+    private boolean cancel; //cancel current job
+    
+    @Setter 
+    private boolean disable; //stop JobScheduler Async task if plugin is disabled
     
     private final List<Job> pendingJobs;
     
     private long tickCounter;
     
     private final RegulatoryValue tps = new RegulatoryValue(15,15,5);
-    
-    //Job currentJob;
     
     public JobScheduler(List<Job> pendingJobs) {
         super();
@@ -72,10 +71,8 @@ public class JobScheduler extends BukkitRunnable {
         long logTicks = 0;
         long logTime = System.currentTimeMillis();
         long lastTime = logTime;
-        long logJobTaskStartTime = logTime;
-        int logTaskSize = 0;
-        int logProcessedBlocks = 0;
-        int logReplacedBlocks = 0;
+        long logProcessedBlocks = 0;
+        long logReplacedBlocks = 0;
         DevUtil.log("start ticker");
         BukkitTask ticker = new BukkitRunnable() {
             @Override
@@ -87,7 +84,7 @@ public class JobScheduler extends BukkitRunnable {
             float taskSize = START_TASK_SIZE;
             long lastTickCounter = 0;
             boolean recovery=false;
-            while(!(pendingJobs.isEmpty())){// && isJobFinished())) {
+            while(!(pendingJobs.isEmpty()) && !disable){// && isJobFinished())) {
                 long currentTime = System.currentTimeMillis();
                 long currentTickCounter = tickCounter;
                 float tpsNew = (float)((currentTickCounter-lastTickCounter)*1000.0/(currentTime-lastTime));
@@ -99,52 +96,70 @@ public class JobScheduler extends BukkitRunnable {
                 } else {
                     if(!pendingJobs.get(0).isTaskPending()) {
                         if(pendingJobs.get(0).isFinished()) {
+                            DevUtil.log("job finished in time: "+(pendingJobs.get(0).getDuration())+" sec");
                             pendingJobs.remove(0);
-                            DevUtil.log("job finished in time: "+(currentTime-logJobTaskStartTime)/1000+" sec");
                             if(pendingJobs.isEmpty()) {
+                                DevUtil.log("disable async job scheduler for no more jobs");
                                 break;
                             }
                         }
                         taskSize = START_TASK_SIZE;
                         pendingJobs.get(0).setTaskSize(taskSize);
                         pendingJobs.get(0).startTask();
-                        logJobTaskStartTime = currentTime;
                         DevUtil.log("job started");
                         tps.reset(tps.getDesired());
                     } else {
-                        taskSize = calculateTaskSize(taskSize);
+                        if(tps.getAverage()<10) {
+                            taskSize = taskSize / 2;
+                        } else {
+                            taskSize = calculateTaskSize(taskSize);
+                        }
+                        taskSize = Math.max(0.3f, taskSize);
                         pendingJobs.get(0).setTaskSize(taskSize);
                         DevUtil.log(2,"current task size: "+taskSize);
                     }
                 }
                 if(cancel) {
                     pendingJobs.get(0).stopTask();
+                    pendingJobs.get(0).clearJobData();
                     pendingJobs.remove(0);
                     DevUtil.log(1,"canceled job, jobs left: "+pendingJobs.size());
                     if(pendingJobs.isEmpty()) {
+                        DevUtil.log("disable async job scheduler for no more jobs");
                         break;
                     }
                     cancel = false;
                 }
                 DevUtil.log(3,"Dt: "+(currentTime-lastTime));
                 if(logTime<currentTime-10000) {
-                    DevUtil.log("***");
                     double serverTps = (currentTickCounter-logTicks)/((currentTime-logTime)/1000.0);
-                    recovery = serverTps < tps.getAverage()-2 || serverTps < 10;
+                    recovery = serverTps < tps.getAverage()-4 || serverTps < 5;
+                    MessageManager.sendCurrentJobStatus(pendingJobs.get(0));
+
+                    DevUtil.log("***");
                     DevUtil.log("Server tps: "+serverTps+" server lag: "+recovery);
                     DevUtil.log("Workers: "+Bukkit.getScheduler().getActiveWorkers().size()+" Tasks: "+Bukkit.getScheduler().getPendingTasks().size());
                     DevUtil.log("Processed blocks: "+(pendingJobs.get(0).getAction().getProcessedBlocks()-logProcessedBlocks));
                     if(pendingJobs.get(0).getAction() instanceof JobActionReplace) {
-                        DevUtil.log("Replaced blocks: "+(((JobActionReplace)pendingJobs.get(0).getAction()).getReplacedBlocks()-logReplacedBlocks));
-                        logReplacedBlocks = ((JobActionReplace)pendingJobs.get(0).getAction()).getReplacedBlocks();
+                        DevUtil.log("Replaced blocks: "+(((JobActionReplace)pendingJobs.get(0).getAction()).getFoundBlocks()-logReplacedBlocks));
+                        logReplacedBlocks = ((JobActionReplace)pendingJobs.get(0).getAction()).getFoundBlocks();
                     }
-                    DevUtil.log("Working at coord: "+pendingJobs.get(0).getCurrent().getBlockX()*16+" "
-                                                    +pendingJobs.get(0).getCurrent().getBlockZ()*16);
+                    DevUtil.log("Working at coord: "+pendingJobs.get(0).getCurrentChunk().getBlockX()*16+" "
+                                                    +pendingJobs.get(0).getCurrentChunk().getBlockZ()*16);
                     DevUtil.log("Done "+Math.min(100,(pendingJobs.get(0).getChunksDone()*100.0/pendingJobs.get(0).getJobSize()))+"%");
+                    if(recovery) {
+                        DevUtil.log("Saving world...");
+                        final World world = pendingJobs.get(0).getWorld();
+                        new BukkitRunnable() {
+                            @Override
+                            public void run() {
+                                world.save();
+                            }
+                        }.runTask(ChunkAnalysis.getInstance());
+                    }
                     logProcessedBlocks = pendingJobs.get(0).getAction().getProcessedBlocks();
                     logTime=currentTime;
                     logTicks = currentTickCounter;
-                    logTaskSize = 0;
                 }
                 lastTickCounter = currentTickCounter;
                 lastTime = currentTime;
@@ -156,15 +171,20 @@ public class JobScheduler extends BukkitRunnable {
             }
         }
         finally {
+            if(pendingJobs.size()>0) {
+                pendingJobs.get(0).stopTask();
+            }
+            disable = false;
             ticker.cancel();
         }
+        DevUtil.log("Async job scheduler disabled");
     }
     
     private float calculateTaskSize(float taskSize) {
         DevUtil.log(3,"i: "+i+" integral: "+tps.getIntegral());
         DevUtil.log(3,"d: "+d+" difference: "+tps.getDifference());
         DevUtil.log(3,"v: "+v+" velocity: "+tps.getVelocity());
-        float diff= (taskSize)/tps.getDesired()*(i*tps.getIntegral() //+1 to get up again from task size 0;
+        float diff= (taskSize)/tps.getDesired()*(i*tps.getIntegral()
                                                 +d*tps.getDifference()
                                                 +v*tps.getVelocity());
         DevUtil.log(3,"old task size: "+taskSize+" calculated diff: "+diff);
@@ -179,8 +199,8 @@ public class JobScheduler extends BukkitRunnable {
         int serverTps = desiredTps;
         if(serverTps>20) {
             serverTps = 20;
-        } else if(serverTps<1) {
-            serverTps = 1;
+        } else if(serverTps<10) {
+            serverTps = 10;
         }
         tps.setDesired(serverTps);
     }
