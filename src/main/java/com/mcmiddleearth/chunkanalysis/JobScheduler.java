@@ -22,8 +22,10 @@ import com.mcmiddleearth.chunkanalysis.util.DevUtil;
 import com.mcmiddleearth.chunkanalysis.job.action.JobActionReplace;
 import com.mcmiddleearth.chunkanalysis.job.Job;
 import java.util.List;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import lombok.Getter;
 import lombok.Setter;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
@@ -46,6 +48,7 @@ public class JobScheduler extends BukkitRunnable {
     float v = 1;
     
     @Setter
+    @Getter
     private boolean suspended;
     
     @Setter
@@ -97,7 +100,12 @@ public class JobScheduler extends BukkitRunnable {
                     if(!pendingJobs.get(0).isTaskPending()) {
                         if(pendingJobs.get(0).isFinished()) {
                             DevUtil.log("job finished in time: "+(pendingJobs.get(0).getDuration())+" sec");
+                            UUID owner = pendingJobs.get(0).getOwner();
+                            MessageManager.sendJobFinished(pendingJobs.get(0));
                             pendingJobs.remove(0);
+                            if(!JobManager.ownsJob(owner)) {
+                                MessageManager.removeListeningPlayer(owner);
+                            }
                             if(pendingJobs.isEmpty()) {
                                 DevUtil.log("disable async job scheduler for no more jobs");
                                 break;
@@ -107,6 +115,7 @@ public class JobScheduler extends BukkitRunnable {
                         pendingJobs.get(0).setTaskSize(taskSize);
                         pendingJobs.get(0).startTask();
                         DevUtil.log("job started");
+                        MessageManager.sendJobStarted(pendingJobs.get(0));
                         tps.reset(tps.getDesired());
                     } else {
                         if(tps.getAverage()<10) {
@@ -122,7 +131,12 @@ public class JobScheduler extends BukkitRunnable {
                 if(cancel) {
                     pendingJobs.get(0).stopTask();
                     pendingJobs.get(0).clearJobData();
+                    UUID owner = pendingJobs.get(0).getOwner();
+                    MessageManager.sendJobCancelled(pendingJobs.get(0));
                     pendingJobs.remove(0);
+                    if(!JobManager.ownsJob(owner)) {
+                        MessageManager.removeListeningPlayer(owner);
+                    }
                     DevUtil.log(1,"canceled job, jobs left: "+pendingJobs.size());
                     if(pendingJobs.isEmpty()) {
                         DevUtil.log("disable async job scheduler for no more jobs");

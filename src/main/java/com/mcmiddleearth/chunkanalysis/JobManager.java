@@ -23,6 +23,7 @@ import com.mcmiddleearth.chunkanalysis.job.Job;
 import com.mcmiddleearth.chunkanalysis.util.DBUtil;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitTask;
@@ -38,17 +39,34 @@ public class JobManager {
     @Getter
     private static JobScheduler jobScheduler;
     
+    @Getter
     private static List<Job> pendingJobs = new ArrayList<>();
     
     public static void init() {
         pendingJobs = DBUtil.loadJobs();
+        for(Job job: pendingJobs) {
+            MessageManager.addListeningPlayer(job.getOwner());
+        }
         if(pendingJobs.size()>0) {
             startScheduler();
         }
     }
     public static void addJob(Job newJob) {
         pendingJobs.add(newJob);
+        MessageManager.deleteOldMessages();
         startScheduler();
+    }
+    
+    public static void removeJob(int jobId) {
+        Job found = null;
+        for(Job job:pendingJobs) {
+            if(job.getId()==jobId) {
+                found = job;
+            }
+        }
+        if(found!=null) {
+            pendingJobs.remove(found);
+        }
     }
     
     private static void startScheduler() {
@@ -72,4 +90,25 @@ public class JobManager {
                    || Bukkit.getScheduler().isQueued(schedulerTask.getTaskId()));
     }
     
+    public static boolean isCurrentJob(int jobId) {
+        return !pendingJobs.isEmpty() && pendingJobs.get(0).getId()==jobId;
+    }
+    
+    public static boolean hasJob(int jobId) {
+        for(Job job: pendingJobs) {
+            if(job.getId()==jobId) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    public static boolean ownsJob(UUID player) {
+        for(Job job: pendingJobs) {
+            if(job.getOwner().equals(player)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

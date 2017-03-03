@@ -16,6 +16,7 @@
  */
 package com.mcmiddleearth.chunkanalysis.util;
 
+import com.mcmiddleearth.chunkanalysis.ChunkAnalysis;
 import com.mcmiddleearth.chunkanalysis.job.Job;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -25,11 +26,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import lombok.Getter;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 import org.mariadb.jdbc.MySQLDataSource;
 
@@ -50,19 +53,25 @@ public class DBUtil {
     private static PreparedStatement logJobCoord;
     private static PreparedStatement logBlockIds;
     private static PreparedStatement logJobStart;
+    private static PreparedStatement logJobResultUpdate;
     private static PreparedStatement logBlock;
     private static PreparedStatement logChunk;
+    private static PreparedStatement logMessage;
     private static PreparedStatement deleteJob;
     private static PreparedStatement deleteJobCoords;
     private static PreparedStatement deleteJobBlocks;
+    private static PreparedStatement deleteMessages;
     
     private static PreparedStatement getJobs;
     private static PreparedStatement getJobCoords;
     private static PreparedStatement getBlockIds;
     private static PreparedStatement getJobIds;
+    private static PreparedStatement getMessages;
     
     @Getter
     private static boolean connected = false;
+    
+    private final static boolean executeUpdatesAsync = false; //!!!true here crashes the server!!!
     
     public static void init(String ip, int port, String dbName, String newDbUser, String newDbPassword){
         dataBase = new MySQLDataSource(ip,port,dbName);
@@ -79,15 +88,16 @@ public class DBUtil {
                 logJobCreate.setString(3,job.getClass().getName());
                 logJobCreate.setString(4,job.getAction().getClass().getName());
                 logJobCreate.setString(5,job.getWorld().getName());
-                logJobCreate.executeUpdate();
-                for(int i=0;i<job.getCoords().length;i++) {
-                    Vector coord = job.getCoords()[i];
+                executeUpdate(logJobCreate);
+                Vector[] coords = job.getCoords();
+                for(int i=0;i<coords.length;i++) {
+                    Vector coord = coords[i];
                     logJobCoord.setInt(1, coord.getBlockX());
                     logJobCoord.setInt(2, coord.getBlockY());
                     logJobCoord.setInt(3, coord.getBlockZ());
                     logJobCoord.setInt(4, job.getId());
                     logJobCoord.setInt(5, i);
-                    logJobCoord.executeUpdate();
+                    executeUpdate(logJobCoord);
                 }
                 for(int i=0;i<job.getAction().getBlockIds().length;i++) {
                     int[] blockId = job.getAction().getBlockIds()[i];
@@ -95,7 +105,8 @@ public class DBUtil {
                     logBlockIds.setInt(2, blockId[1]);
                     logBlockIds.setInt(3, job.getId());
                     logBlockIds.setInt(4, i);
-                    logBlockIds.executeUpdate();
+                    logBlockIds.setInt(5, 0);//blockId[2]);
+                    executeUpdate(logBlockIds);
                 }
             } catch (SQLException ex) {
                 connected = false;
@@ -113,7 +124,7 @@ public class DBUtil {
                 logBlock.setLong(4, processed);
                 logBlock.setLong(5, found);
                 logBlock.setInt(6,job.getId());
-                logBlock.executeUpdate();
+                executeUpdate(logBlock);
             } catch (SQLException ex) {
                 connected = false;
                 Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
@@ -133,7 +144,7 @@ public class DBUtil {
                 logChunk.setLong(6, processed);
                 logChunk.setLong(7, found);
                 logChunk.setInt(8,job.getId());
-                logChunk.executeUpdate();
+                executeUpdate(logChunk);
             } catch (SQLException ex) {
                 connected = false;
                 Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
@@ -146,9 +157,22 @@ public class DBUtil {
             try {
                 logJobStart.setTimestamp(1,new Timestamp(job.getStartTime()));
                 logJobStart.setInt(2,job.getId());
-                logJobStart.executeUpdate();
+                executeUpdate(logJobStart);
             } catch (SQLException ex) {
                 connected = false;
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+    
+    public static void logJobResult(int jobId, int index, int counter) {
+        if(isConnected()) {
+            try {
+                logJobResultUpdate.setInt(1, counter);
+                logJobResultUpdate.setInt(2, jobId);
+                logJobResultUpdate.setInt(3, index);
+                executeUpdate(logJobResultUpdate);
+            } catch (SQLException ex) {
                 Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
@@ -160,9 +184,9 @@ public class DBUtil {
                 deleteJob.setInt(1,job.getId());
                 deleteJob.executeUpdate();
                 deleteJobCoords.setInt(1,job.getId());
-                deleteJobCoords.executeUpdate();
+                executeUpdate(deleteJobCoords);
                 deleteJobBlocks.setInt(1,job.getId());
-                deleteJobBlocks.executeUpdate();
+                executeUpdate(deleteJobBlocks);
             } catch (SQLException ex) {
                 connected = false;
                 Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
@@ -178,7 +202,7 @@ public class DBUtil {
                 int[] jobIds = new int[jobIdData.getRow()];
                 for(int i=0; i<jobIds.length;i++) {
                     jobIdData.absolute(i+1);
-                    jobIds[i]=jobIdData.getInt(1);
+                    jobIds[i]=jobIdData.getInt("jobID");
                 }
                 return jobIds;
             } catch (SQLException ex) {
@@ -220,14 +244,19 @@ public class DBUtil {
                         getBlockIds.setInt(1, id);
                         ResultSet blockData = getBlockIds.executeQuery();
                         blockData.last();
-                        int[][] blockIds = new int[coordData.getRow()][];
+                        int[][] blockIds = new int[blockData.getRow()][];
                         for(int i = 1; i<=blockIds.length;i++) {
                             blockData.absolute(i);
                             blockIds[blockData.getInt("index")] = new int[]{blockData.getInt("ID"),
-                                                                            blockData.getInt("DV")};
+                                                                            blockData.getInt("DV"),
+                                                                            blockData.getInt("counter")};
                         }
                         UUID uuid = UUID.fromString(jobData.getString("owner"));
-                        long startTime = jobData.getTimestamp("startTime").getTime();
+                        Timestamp stamp = jobData.getTimestamp("startTime");
+                        long startTime = 0;
+                        if(stamp!=null) {
+                            startTime = jobData.getTimestamp("startTime").getTime();
+                        }
                         long processed = jobData.getLong("processed");
                         long found = jobData.getLong("found");
                         try {
@@ -262,6 +291,62 @@ public class DBUtil {
         return new ArrayList<>();
     }
     
+    public static void logMessage(String[] messages) {
+        if(isConnected()) {
+            try {
+                logMessage.setTimestamp(1,new Timestamp(System.currentTimeMillis()));
+                String message = "";
+                if(messages.length>0) {
+                    message = messages[0];
+                }
+                for(int i=1;i<messages.length;i++) {
+                    message = message + "\\n" + messages[i];
+                }
+                logMessage.setString(2, message);
+                executeUpdate(logMessage);
+            } catch (SQLException ex) {
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+    
+    public static List<String[]> getMessages() {
+        List<String[]>messages = new ArrayList<>();
+        if(isConnected()) {
+            try {
+                ResultSet data = getMessages.executeQuery();
+                if(data.first()) {
+                    data.last();
+                    int numberOfMessages = data.getRow();
+                    for(int i=1;i<=numberOfMessages;i++) {
+                        data.absolute(i);
+                        long time = data.getTimestamp("time").getTime();
+                        String messageData = data.getString("message");
+                        String[] temp = messageData.split("\\\\n");
+                        String[] message = new String[temp.length+1];
+                        message[0] = temp[0];
+                        message[1] = "  ["+new Date(time)+"]  ";
+                        System.arraycopy(temp, 1, message, 2, temp.length - 1);
+                        messages.add(message);
+                    }
+                }
+            } catch (SQLException ex) {
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return messages;
+    }
+    
+    public static void deleteMessages(int storagePeriod) {
+        try {
+            deleteMessages.setTimestamp(1,new Timestamp(System.currentTimeMillis()
+                                                        -(storagePeriod*24*3600*1000)));
+            executeUpdate(deleteMessages);
+        } catch (SQLException ex) {
+            Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+    
     public static boolean checkConnection() {
         try {
             if(connected && dbConnection.isValid(1)) {
@@ -283,23 +368,49 @@ public class DBUtil {
             
             logJobCreate = dbConnection.prepareStatement("INSERT INTO jobs VALUES (?,?,?,0,0,0,NULL,NULL,0,0,0,?,?)");
             logJobCoord = dbConnection.prepareStatement("INSERT INTO jobcoords VALUES (?,?,?,?,?)");
-            logBlockIds = dbConnection.prepareStatement("INSERT INTO blockid VALUES (?,?,?,?)");
+            logBlockIds = dbConnection.prepareStatement("INSERT INTO blockid VALUES (?,?,?,?,?)");
             logJobStart = dbConnection.prepareStatement("UPDATE jobs SET startTime = ? WHERE jobID = ?");
+            logJobResultUpdate = dbConnection.prepareStatement("UPDATE blockid SET counter = ?"
+                                                               +" WHERE jobID = ? AND `index` = ?");
             logBlock = dbConnection.prepareStatement("UPDATE jobs SET x = ?, y = ?, z = ?,"
                                                      + " processed = ?, found = ? WHERE jobID = ?");
             logChunk = dbConnection.prepareStatement("UPDATE jobs SET chunkX = ?, chunkZ = ?, x = ?, y = ?, z = ?,"
                                                      +" processed = ?, found = ? WHERE jobID = ?");
+            logMessage = dbConnection.prepareStatement("INSERT INTO messages VALUES (?,?)");
             deleteJob = dbConnection.prepareStatement("DELETE FROM jobs WHERE jobID = ?");
             deleteJobCoords = dbConnection.prepareStatement("DELETE FROM jobcoords WHERE jobID = ?");
             deleteJobBlocks = dbConnection.prepareStatement("DELETE FROM blockid WHERE jobID = ?");
+            deleteMessages = dbConnection.prepareStatement("DELETE FROM messages WHERE time < ?");
             getJobs = dbConnection.prepareStatement("SELECT * FROM jobs");
             getJobCoords = dbConnection.prepareStatement("SELECT * FROM jobcoords WHERE jobID = ?");
             getBlockIds = dbConnection.prepareStatement("SELECT * FROM blockid WHERE jobID = ?");
-            getJobIds = dbConnection.prepareStatement("SELECT jobID FROM blockid");
+            getJobIds = dbConnection.prepareStatement("SELECT jobID FROM jobs");
+            getMessages = dbConnection.prepareStatement("SELECT * FROM messages ORDER BY time DESC, message DESC");
             connected = true;
         } catch (SQLException ex) {
             connected = false;
             Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, "Connection to DB failed", ex);
+        }
+    }
+    
+    private static void executeUpdate(final PreparedStatement statement) {
+        if(executeUpdatesAsync) {
+            new BukkitRunnable(){
+                @Override
+                public void run() {
+                    try {
+                        statement.executeUpdate();
+                    } catch (SQLException ex) {
+                        Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                }
+            }.runTaskAsynchronously(ChunkAnalysis.getInstance());
+        } else {
+            try {
+                statement.executeUpdate();
+            } catch (SQLException ex) {
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
     }
 }

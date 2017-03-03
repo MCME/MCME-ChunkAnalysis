@@ -24,6 +24,7 @@ import com.mcmiddleearth.chunkanalysis.util.DBUtil;
 import com.sk89q.worldedit.bukkit.selections.CuboidSelection;
 import java.util.UUID;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.util.Vector;
@@ -49,15 +50,15 @@ public final class CuboidJob extends Job {
         super(owner, region.getWorld(), action, id, startTime, chunksDone);
         world = region.getWorld();
         DevUtil.log("create job in world "+world);
-        //x and y are chunk coordinates; y is block coordinate
+        //x and z are chunk coordinates; y is block coordinate
         minCorner = new Vector(world.getChunkAt(region.getMinimumPoint()).getX(), 
                                region.getMinimumPoint().getBlockY(),
                                world.getChunkAt(region.getMinimumPoint()).getZ());
-        DevUtil.log("create job with min corner "+minCorner);
+        DevUtil.log("create cuboid job with min corner "+minCorner);
         maxCorner = new Vector(world.getChunkAt(region.getMaximumPoint()).getX(), 
                                region.getMaximumPoint().getBlockY(),
                                world.getChunkAt(region.getMaximumPoint()).getZ());
-        DevUtil.log("create job with max corner "+maxCorner);
+        DevUtil.log("create cuboid job with max corner "+maxCorner);
         currentChunk = minCorner.clone();
         jobSize = (maxCorner.getBlockX()-minCorner.getBlockX())*(maxCorner.getBlockZ()-minCorner.getBlockZ());
         chunksDone = 0;
@@ -88,7 +89,7 @@ public final class CuboidJob extends Job {
     
     @Override
     protected void executeTask(final int taskSize) {
-        DevUtil.log(6,"start job task current "+currentChunk.getBlockX()+" "+currentChunk.getBlockZ());
+        DevUtil.log(6,"start cuboid job task current "+currentChunk.getBlockX()+" "+currentChunk.getBlockZ());
         int chunksDoneStart = chunksDone;
         Vector lastFinished=null;
         int startX = currentChunk.getBlockX();
@@ -115,12 +116,14 @@ public final class CuboidJob extends Job {
                     DBUtil.logChunk(this,x,z,0,0,0, getAction().getProcessedBlocks(),
                                                     getAction().getFoundBlocks());
                } else {
+                    getAction().saveResults(getId());
                     return;
                 }
                 chunksDone++;
             }
             startZ = minCorner.getBlockZ();
         }
+        getAction().saveResults(getId());
         if(lastFinished==null || (lastFinished.getBlockX()==maxCorner.getBlockX() 
                 && lastFinished.getBlockZ() == maxCorner.getBlockZ())) {
             finished = true;
@@ -179,14 +182,18 @@ public final class CuboidJob extends Job {
     }
 
     @Override
-    protected String detailsMessage() {
-        return "Cuboid job from ("+minCorner.getBlockX()*16+"|"+minCorner.getBlockY()+"|"+(minCorner.getBlockZ()*16+15)+" to "
-                                  +maxCorner.getBlockX()*16+"|"+maxCorner.getBlockY()+"|"+(maxCorner.getBlockZ()*16+15)+". Size "
-                                  +jobSize+" blocks.";
+    public String detailMessage() {
+        return "Cuboid job from " +ChatColor.GREEN
+                                  +minCorner.getBlockX()*16+" "+minCorner.getBlockY()+" "+(minCorner.getBlockZ()*16+15)
+                                  +ChatColor.AQUA+" to "+ChatColor.GREEN
+                                  +maxCorner.getBlockX()*16+" "+maxCorner.getBlockY()+" "+(maxCorner.getBlockZ()*16+15)+".\n"
+                                  +ChatColor.AQUA+"Total Size "+ChatColor.GREEN+jobSize+ChatColor.AQUA+" chunks.\n"
+                                  +action.getDetails();
     }
     
     @Override
     public Vector[] getCoords() {
         return new Vector[]{minCorner,maxCorner};
     }
+    
 }

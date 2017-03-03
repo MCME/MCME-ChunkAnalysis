@@ -1,2 +1,4 @@
-maxChunk: 1087,935
-minChunk: -769,-760
+world:
+  minBlock: 0,0
+  maxBlock: 1000,1000
+messageStoragePeriod: 1

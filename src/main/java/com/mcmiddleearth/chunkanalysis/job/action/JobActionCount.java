@@ -18,6 +18,7 @@
  */
 package com.mcmiddleearth.chunkanalysis.job.action;
 
+import com.mcmiddleearth.chunkanalysis.util.DBUtil;
 import org.bukkit.block.Block;
 
 /**
@@ -26,39 +27,83 @@ import org.bukkit.block.Block;
  */
 public class JobActionCount extends JobAction {
     
-    private final int[][] search;
-        
+    private final int[][] searchData;
+    private final int ID = 0;
+    private final int DV = 1;
+    private final int COUNT = 2;
+    
+    private boolean[] changedResults;
+    
+    public JobActionCount(int[][] search) {
+        this(search,0,0);
+    }
+    
     public JobActionCount(int[][] search, long processed, long found) {
         super(processed, found);
-        foundBlocks = found;
-        this.search = search;
+        this.searchData = search;
+        this.changedResults = new boolean[search.length];
+        if(search.length>0 && search[0].length<=COUNT) {
+            for(int i = 0; i<search.length;i++) {
+                int[] data = searchData[i];
+                searchData[i] = new int[]{data[ID],data[DV],0};
+            }
+        }
     }
     
     @Override
     public void execute(Block block) {
         super.execute(block);
-        for (int[] blockData : search) {
-            if (block.getTypeId() == blockData[0] && (blockData[1] == -1 || block.getData() == blockData[1])) {
+        for (int i = 0; i < searchData.length; i++) {
+            int[] blockData = searchData[i];
+            if (block.getTypeId() == blockData[ID] && (blockData[DV] == -1 || block.getData() == blockData[DV])) {
                 foundBlocks++;
+                searchData[i][COUNT]++;
+                changedResults[i]=true;
                 break;
             }
         }
     }
 
-    @Override
+    /*@Override
     public String statMessage() {
         String result = "Found "+foundBlocks+" of (";
-        for(int i=0; i<search.length-1;i++) {
-            result = result+search[i][0]+":"+search[i][1]+", ";
+        for(int i=0; i<searchData.length-1;i++) {
+            result = result+searchData[i][ID]+":"+searchData[i][DV]+", ";
         }
-        if(search.length>0) {
-            result = result+search[search.length-1][0]+":"+search[search.length-1][1];
+        if(searchData.length>0) {
+            result = result+searchData[searchData.length-1][ID]+":"+searchData[searchData.length-1][DV];
         }
         return result+")";
-    }
+    }*/
 
     @Override
     public int[][] getBlockIds() {
-        return search;
+        return searchData;
     }
+
+    @Override
+    public void saveResults(int jobId) {
+        for(int i=0; i<searchData.length;i++) {
+            if(changedResults[i]) {
+                DBUtil.logJobResult(jobId, i, searchData[i][COUNT]);
+                changedResults[i]=false;
+            }
+        }
+    }
+    
+    @Override
+    public String getName() {
+        return "analyse";
+    }
+    
+    @Override
+    public String getDetails() {
+        String result = "Counting blocks:\n";
+        for (int[] searchData1 : searchData) {
+            result = result + " - ["+searchData1[ID] + ":" + (searchData1[DV]==-1?"?":searchData1[DV]) + "] - "
+                    +(searchData1[COUNT]>100000?">100000":searchData1[COUNT])+"\n";
+        }
+        return result;
+    }
+
 }

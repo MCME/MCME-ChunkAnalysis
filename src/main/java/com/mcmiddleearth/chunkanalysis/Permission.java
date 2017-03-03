@@ -16,39 +16,16 @@
  * 
  * 
  */
-package com.mcmiddleearth.chunkanalysis.job.action;
 
-import lombok.Getter;
-import org.bukkit.block.Block;
+package com.mcmiddleearth.chunkanalysis;
 
 /**
  *
  * @author Eriol_Eandur
  */
-public abstract class JobAction {
+public class Permission {
     
-    @Getter
-    private long processedBlocks=0;
+    public final static String USE = "chunkanalysis.use";
+    public final static String DEV = "chunkanalysis.developer";
     
-    @Getter
-    protected long foundBlocks=0;
-    
-    public JobAction(long processed, long found) {
-        processedBlocks = processed;   
-        foundBlocks = found;
-    }
-    
-    public void execute(Block block) {
-        processedBlocks++;
-    }
-
-    public abstract void saveResults(int jobId);
-    
-    //public abstract String statMessage();
-    
-    public abstract int[][] getBlockIds();
-    
-    public abstract String getName();
-    
-    public abstract String getDetails();
 }

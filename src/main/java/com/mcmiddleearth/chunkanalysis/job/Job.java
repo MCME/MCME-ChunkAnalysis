@@ -32,8 +32,8 @@ import java.util.logging.Logger;
 import lombok.Getter;
 import lombok.Setter;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.World;
-import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
@@ -45,10 +45,10 @@ import org.bukkit.util.Vector;
 public abstract class Job {
     
     @Getter
-    private int id;
+    private final int id;
     
     @Getter
-    private UUID owner;
+    private final UUID owner;
     
     private File statsFile;
     
@@ -108,14 +108,13 @@ public abstract class Job {
             taskCancelled=false;
             if(startTime==-1) {
                 startTime=System.currentTimeMillis()/1000;
-                MessageManager.sendJobStarted(this);
                 DBUtil.logStartTime(this);
             }
             //jobTask = createJobTask(taskSize).runTask(ChunkAnalysis.getInstance());
             jobTask = new BukkitRunnable() {
                 @Override
                 public void run() {
-                    DevUtil.log(6,"Startin job with size: "+taskSize);
+                    DevUtil.log(6,"Starting job with size: "+taskSize);
                     int taskSizeInt = Math.round(taskSize);
                     if(taskSizeInt>0) {
                         executeTask(taskSizeInt);
@@ -123,7 +122,6 @@ public abstract class Job {
                     if(isFinished()) {
                         finishTime = System.currentTimeMillis()/1000;
                         cancel();
-                        MessageManager.sendJobFinished(self);
                         clearJobData();
                     }
                 }
@@ -134,7 +132,7 @@ public abstract class Job {
     //protected abstract BukkitRunnable createJobTask(int askSize);
     
     public void stopTask() {
-        if(!taskCancelled) {
+        if(jobTask!=null && !taskCancelled) {
             taskCancelled = true;
             jobTask.cancel();
         }
@@ -152,17 +150,21 @@ public abstract class Job {
     
     public abstract Vector[] getCoords();
 
-    protected abstract String detailsMessage();
-    
     public String statMessage() {
-        if(isFinished()) {
+        /*if(isFinished()) {
             return "Finished in "+(finishTime-startTime)+"seconds. "+action.statMessage();
         } else if(startTime==-1){
-            return "Not yet started.";
-        } else {
-            return Math.min(100,(getChunksDone()*100.0/getJobSize()))+"% done. Working at "
-                    + (currentChunk.getBlockX()*16)+" "+(currentChunk.getBlockZ()*16)+". "+action.statMessage();
-        }
+            return "Not yet started. "+action.statMessage();
+        } else {*/
+            String percentage = ""+Math.min(100,(getChunksDone()*100.0/getJobSize()));
+            if(percentage.contains(".") && percentage.length()>percentage.indexOf(".")+3) {
+                percentage = percentage.substring(0,percentage.indexOf(".")+3);
+            }
+            return ChatColor.GREEN+percentage+"%"
+                    +ChatColor.AQUA+" done. Working at "+ChatColor.GREEN
+                    + (currentChunk.getBlockX()*16)+" "+(currentChunk.getBlockZ()*16)
+                    +ChatColor.AQUA+". ";
+        //}
     }
     
     protected static int getFreeJobId() {
@@ -194,4 +196,14 @@ public abstract class Job {
         }
         return null;
     }
+    
+    public String getOwnerName() {
+        return Bukkit.getOfflinePlayer(getOwner()).getName();
+    }
+    
+    public String getActionName() {
+        return action.getName();
+    }
+    
+    public abstract String detailMessage();
 }

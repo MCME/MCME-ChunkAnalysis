@@ -2,8 +2,9 @@ name: ChunkAnalysis
 main: com.mcmiddleearth.chunkanalysis.ChunkAnalysis
 version: 1
 description: Analysis or modification of chunks in the world
-author: Dallen
-depend: [WorldEdit, ResourceRegions]
+author: Dallen, Eriol_Eandur
+depend: [WorldEdit]
+softdepend: [MCME-Architect, ResourceRegions]
 commands:
   block:
     description: analyse of modify blocks by filter

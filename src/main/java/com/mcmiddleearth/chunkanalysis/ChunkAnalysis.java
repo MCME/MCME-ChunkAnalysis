@@ -18,10 +18,14 @@
  */
 package com.mcmiddleearth.chunkanalysis;
 
+import com.mcmiddleearth.chunkanalysis.command.ChunkAnalyisisCommandExecutor;
 import com.mcmiddleearth.chunkanalysis.util.DevUtil;
 import com.mcmiddleearth.chunkanalysis.job.action.JobActionReplace;
 import com.mcmiddleearth.chunkanalysis.job.CuboidJob;
+import com.mcmiddleearth.chunkanalysis.listener.PlayerListener;
 import com.mcmiddleearth.chunkanalysis.util.DBUtil;
+import com.mcmiddleearth.pluginutil.NumericUtil;
+import com.mcmiddleearth.pluginutil.message.MessageUtil;
 import com.sk89q.worldedit.bukkit.WorldEditPlugin;
 import com.sk89q.worldedit.bukkit.selections.CuboidSelection;
 import com.sk89q.worldedit.bukkit.selections.Selection;
@@ -49,8 +53,11 @@ import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.util.Vector;
 
 /**
  *
@@ -61,30 +68,48 @@ public class ChunkAnalysis extends JavaPlugin {
     private static Point maxChunk;
     private static Point minChunk;
     
+    @Getter
+    private static int messageStoragePeriod;
+    
+    @Getter
     private static WorldEditPlugin worldEdit;
     
-    private static RegionManager rm = null;
+    @Getter
+    private static RegionManager regionManager = null;
     
     @Getter
     private static JavaPlugin instance;
     
+    @Getter
+    private final static MessageUtil messageUtil = new MessageUtil();
+    
     @Override
     public void onEnable(){
         instance = this;
+        messageStoragePeriod = this.getConfig().getInt("messageStoragePeriod");
         DevUtil.setLevel(2);
-        DBUtil.init();
-        this.getCommand("block").setExecutor(new Commands());
+        messageUtil.setPluginName("ChunkAnalysis");
+        DBUtil.init("localhost",3306,"chunkanalysislog","chunkanalyse","chunkanalyse");
+        //DBUtil.deleteMessages(messageStoragePeriod);
+        MessageManager.deleteOldMessages();
         worldEdit = (WorldEditPlugin) this.getServer().getPluginManager().getPlugin("WorldEdit");
+        this.getCommand("block").setExecutor(new ChunkAnalyisisCommandExecutor());
+        PluginManager pm = Bukkit.getPluginManager();
+        pm.registerEvents(new PlayerListener(), this);
         try {
-            Method gi = RegionManager.class.getMethod("i");
+            Method gi = RegionManager.class.getDeclaredMethod("i");
             gi.setAccessible(true);
-            rm = (RegionManager) gi.invoke(null);
+            regionManager = (RegionManager) gi.invoke(null);
+            if(Bukkit.getPluginManager().getPlugin("MCME-Architect")==null) {
+                regionManager = null;
+            }
         } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
-            Logger.getLogger(ChunkAnalysis.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(ChunkAnalysis.class.getName()).log(Level.WARNING, "Error",ex);
+            Logger.getLogger(ChunkAnalysis.class.getName()).log(Level.WARNING, "ResourceRegions plugin or MCME Architect plugin not found, '-p' argument not available.");
         }
         this.saveDefaultConfig();
-        maxChunk = confToPoint("maxChunk");
-        minChunk = confToPoint("minChunk");
+        maxChunk = confToPoint("maxBlock");
+        minChunk = confToPoint("minBlock");
         JobManager.init();
     }
     
@@ -104,8 +129,28 @@ public class ChunkAnalysis extends JavaPlugin {
         }
     }
     
+    public Vector getMinBlock(World map) {
+        return getConfigVector(map,"minBlock");
+    }
+    
+    public Vector getMaxBlock(World map) {
+        return getConfigVector(map,"maxBlock");
+    }
+    
+    private Vector getConfigVector(World map, String key) {
+        ConfigurationSection section = this.getConfig().getConfigurationSection(map.getName());
+        if(section == null) {
+            return null;
+        } else {
+            String[] coords = section.getString(key).split(",");
+            return new Vector(NumericUtil.getInt(coords[0]),
+                              0,
+                              NumericUtil.getInt(coords[1]));
+        }
+    }
+    
     private Point confToPoint(String conf){
-        String[] crds = this.getConfig().getString(conf).split(",");
+        String[] crds = this.getConfig().getConfigurationSection("world").getString(conf).split(",");
         return new Point(Integer.parseInt(crds[0]), Integer.parseInt(crds[1]));
     }
     
@@ -176,7 +221,7 @@ public class ChunkAnalysis extends JavaPlugin {
                     return true;
                 }
                 if(args.get(0).equalsIgnoreCase("analyse") && args.size() > 1){
-                    final Material block;
+                    final Material   block;
                     final byte data;
                     String tags = null;
                     boolean clip = false;
@@ -210,10 +255,10 @@ public class ChunkAnalysis extends JavaPlugin {
                             return true;
                         }
                     }else if(args.contains("-p")){
-                        if(sender instanceof Player && rm != null){
+                        if(sender instanceof Player && regionManager != null){
                             int i = args.indexOf("-p");
                             pack = args.get(i+1);
-                        }else if(rm == null){
+                        }else if(regionManager == null){
                             sender.sendMessage("Internal error: could not locate resource regions plugin data");
                             return true;
                         }else{
@@ -249,7 +294,7 @@ public class ChunkAnalysis extends JavaPlugin {
                         
                     }else if(pack != null){
                         Region reg = null;
-                        for(Region re : (Set<Region>) forceGet(rm, "regions")){
+                        for(Region re : (Set<Region>) forceGet(regionManager, "regions")){
                             if(re.getName().equalsIgnoreCase(pack)){
                                 reg=re;
                                 break;
@@ -259,9 +304,9 @@ public class ChunkAnalysis extends JavaPlugin {
                             sender.sendMessage("Pack not found!");
                             return true;
                         }
-                        int n = (int) forceGet(rm, "n");
-                        int[] xpoints = (int[]) forceGet(rm, "xpoints");
-                        int[] zpoints = (int[]) forceGet(rm, "zpoints");
+                        int n = (int) forceGet(regionManager, "n");
+                        int[] xpoints = (int[]) forceGet(regionManager, "xpoints");
+                        int[] zpoints = (int[]) forceGet(regionManager, "zpoints");
                         final Rectangle bounds = new Polygon(xpoints, zpoints, n).getBounds();
                         r = new Runnable(){
                             @Override
@@ -416,7 +461,7 @@ Logger.getGlobal().info("1");
                         };
                     }else if(pack != null){
                         Region reg = null;
-                        for(Region re : (Set<Region>) forceGet(rm, "regions")){
+                        for(Region re : (Set<Region>) forceGet(regionManager, "regions")){
                             if(re.getName().equalsIgnoreCase(pack)){
                                 reg=re;
                                 break;
@@ -426,9 +471,9 @@ Logger.getGlobal().info("1");
                             sender.sendMessage("Pack not found!");
                             return true;
                         }
-                        int n = (int) forceGet(rm, "n");
-                        int[] xpoints = (int[]) forceGet(rm, "xpoints");
-                        int[] zpoints = (int[]) forceGet(rm, "zpoints");
+                        int n = (int) forceGet(regionManager, "n");
+                        int[] xpoints = (int[]) forceGet(regionManager, "xpoints");
+                        int[] zpoints = (int[]) forceGet(regionManager, "zpoints");
                         final Rectangle bounds = new Polygon(xpoints, zpoints, n).getBounds();
                         r = new Runnable(){
                             @Override
@@ -466,7 +511,7 @@ Logger.getGlobal().info("3");
                                                                        Integer.parseInt(args.get(2)),-1}};
                         JobActionReplace action = new JobActionReplace(data,0,0);
                         JobManager.addJob(new CuboidJob(((Player)sender).getUniqueId(),(CuboidSelection)sel,action));
-                        MessageManager.addListeningPlayer(((Player)sender));
+                        MessageManager.addListeningPlayer(((Player)sender).getUniqueId());
                         return true;
                         /*r = new Runnable(){
                             @Override

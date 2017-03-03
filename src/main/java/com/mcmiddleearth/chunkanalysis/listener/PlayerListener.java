@@ -16,39 +16,25 @@
  * 
  * 
  */
-package com.mcmiddleearth.chunkanalysis.job.action;
+package com.mcmiddleearth.chunkanalysis.listener;
 
-import lombok.Getter;
-import org.bukkit.block.Block;
+import com.mcmiddleearth.chunkanalysis.JobManager;
+import com.mcmiddleearth.chunkanalysis.MessageManager;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 
 /**
  *
  * @author Eriol_Eandur
  */
-public abstract class JobAction {
+public class PlayerListener implements Listener{
     
-    @Getter
-    private long processedBlocks=0;
-    
-    @Getter
-    protected long foundBlocks=0;
-    
-    public JobAction(long processed, long found) {
-        processedBlocks = processed;   
-        foundBlocks = found;
+    @EventHandler
+    public void playerJoin(PlayerJoinEvent event) {
+        if(JobManager.ownsJob(event.getPlayer().getUniqueId())) {
+            MessageManager.addListeningPlayer(event.getPlayer().getUniqueId());
+        }
     }
     
-    public void execute(Block block) {
-        processedBlocks++;
-    }
-
-    public abstract void saveResults(int jobId);
-    
-    //public abstract String statMessage();
-    
-    public abstract int[][] getBlockIds();
-    
-    public abstract String getName();
-    
-    public abstract String getDetails();
 }

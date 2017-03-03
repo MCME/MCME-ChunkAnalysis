@@ -32,8 +32,8 @@ public class JobActionReplace extends JobAction {
     
     private final int[][] replaceBlocks;
     
-    public JobActionReplace(int[][] searchBlocks, int[][] replaceBlocks, long processed, long found) {
-        super(processed, found);
+    public JobActionReplace(int[][] searchBlocks, int[][] replaceBlocks) {
+        super(0, 0);
         this.searchBlocks=searchBlocks;
         this.replaceBlocks=replaceBlocks;
     }
@@ -56,17 +56,21 @@ public class JobActionReplace extends JobAction {
                     && (blockData[1] == -1 || block.getData()== blockData[1]) ) {
                 int[] replaceData = replaceBlocks[i];
                 BlockState state = block.getState();
+                byte dv = state.getRawData();
                 state.setTypeId(replaceData[0]);
                 if(replaceData[1]>=0) {
                     state.setRawData((byte) replaceData[1]);
+                } else {
+                    state.setRawData(dv);
                 }
                 state.update(true, false);
                 foundBlocks++;
+                break;
             }
         }
     }
     
-    @Override
+    /*@Override
     public String statMessage() {
         DevUtil.log("Search for "+ searchBlocks.length+" blocks "+searchBlocks[0][0]);
         DevUtil.log("Replace with for "+ replaceBlocks.length+" blocks "+replaceBlocks[0][0]);
@@ -78,7 +82,7 @@ public class JobActionReplace extends JobAction {
             result = result+searchBlocks[searchBlocks.length-1][0]+":"+searchBlocks[searchBlocks.length-1][1];
         }
         return result;
-    }
+    }*/
     
     @Override
     public int[][] getBlockIds() {
@@ -87,4 +91,27 @@ public class JobActionReplace extends JobAction {
         System.arraycopy(replaceBlocks, 0, result, searchBlocks.length, searchBlocks.length);
         return result;
     }
+
+    @Override
+    public void saveResults(int jobId) {
+        // save nothing
+    }
+
+    @Override
+    public String getName() {
+        return "replacement";
+    }
+
+    @Override
+    public String getDetails() {
+        String result = "Replacing blocks:\n";
+        for (int i = 0; i<searchBlocks.length;i++) {
+            int[] searchData = searchBlocks[i];
+            int[] replaceData = replaceBlocks[i];
+            result = result + " - ["+searchData[0] + ":" + (searchData[1]==-1?"?":searchData[1]) + "] -> "
+                                +"["+replaceData[0]+ ":" + (replaceData[1]==-1?"?":replaceData[1]) + "]\n";
+        }
+        return result;
+    }
+
 }
