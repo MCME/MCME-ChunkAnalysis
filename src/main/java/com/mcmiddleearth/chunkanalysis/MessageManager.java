@@ -20,6 +20,7 @@ package com.mcmiddleearth.chunkanalysis;
 
 import com.mcmiddleearth.chunkanalysis.job.Job;
 import com.mcmiddleearth.chunkanalysis.util.DBUtil;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,14 +28,22 @@ import java.util.UUID;
 import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.scheduler.BukkitRunnable;
 
 /**
  *
  * @author Eriol_Eandur
  */
-public class MessageManager {
+public class MessageManager implements Listener{
     
+    @Getter
+    private final static List<ScheduledMessage> scheduledMessages = new ArrayList<>();
     
     @Getter
     private final static String prefix = ChunkAnalysis.getMessageUtil().getPREFIX();
@@ -119,6 +128,24 @@ public class MessageManager {
         DBUtil.logMessage(message);
     }
     
+    public static void sendJobRestarted(Job job) {
+        String[] message = new String[]{""+ChatColor.DARK_RED+ChatColor.BOLD+"WARNING !!!",
+                                        ""+ChatColor.GOLD+"Continued job "
+                                          +ChatColor.YELLOW+"["+job.getId()+"]"
+                                          +ChatColor.GOLD+ " queued by "
+                                          +ChatColor.YELLOW+job.getOwnerName(),
+                                        ""+ChatColor.GOLD+" near coordinates "
+                                          +ChatColor.YELLOW+job.getCurrentChunk().getBlockX()*16+", "
+                                          +ChatColor.YELLOW+job.getCurrentChunk().getBlockZ()*16+".",
+                                        ""+ChatColor.GOLD+ChatColor.BOLD+"There might be missed blocks near that position. Please check the surrounding chunks."};
+        OfflinePlayer p = Bukkit.getOfflinePlayer(job.getOwner());
+        if(!p.isOnline()) {
+            scheduledMessages.add(new ScheduledMessage(p,message));
+        }
+        sendMessage(message);
+        DBUtil.logMessage(message);
+    }
+    
     public static void sendDBConnectionLost() {
         String[] message = new String[]{""+ChatColor.RED,"Warning, connection to database lost. Will not be able to continue the job correctly after server restart."};
         sendMessage(message);
@@ -132,6 +159,45 @@ public class MessageManager {
     
     public static void deleteOldMessages() {
         DBUtil.deleteMessages(ChunkAnalysis.getMessageStoragePeriod());
+    }
+    
+    @EventHandler
+    public void playerJoin(PlayerJoinEvent event) {
+        if(JobManager.ownsJob(event.getPlayer().getUniqueId())) {
+            addListeningPlayer(event.getPlayer().getUniqueId());
+        }
+        final Player p = event.getPlayer();
+        new BukkitRunnable(){
+            @Override
+            public void run() {
+                List<ScheduledMessage> remove = new ArrayList<>();
+                for(ScheduledMessage message: scheduledMessages) {
+                    if(p.getUniqueId().equals(message.getRecipient().getUniqueId())) {
+                        p.sendMessage(message.getMessage());
+                        remove.add(message);
+                    }
+                }
+                scheduledMessages.removeAll(remove);
+            }
+        }.runTaskLater(ChunkAnalysis.getInstance(), 60);
+    }
+    
+    @EventHandler
+    public void playerLeave(PlayerQuitEvent event) {
+        removeListeningPlayer(event.getPlayer().getUniqueId());
+    }
+    
+    private static class ScheduledMessage {
+        
+        @Getter
+        private final OfflinePlayer recipient;
+        @Getter
+        private final String[] message;
+        
+        public ScheduledMessage(OfflinePlayer rec, String[] mes) {
+            recipient = rec;
+            message = mes;
+        }
     }
     
 }

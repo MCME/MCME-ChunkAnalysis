@@ -338,12 +338,14 @@ public class DBUtil {
     }
     
     public static void deleteMessages(int storagePeriod) {
-        try {
-            deleteMessages.setTimestamp(1,new Timestamp(System.currentTimeMillis()
-                                                        -(storagePeriod*24*3600*1000)));
-            executeUpdate(deleteMessages);
-        } catch (SQLException ex) {
-            Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+        if(isConnected()) {
+            try {
+                deleteMessages.setTimestamp(1,new Timestamp(System.currentTimeMillis()
+                                                            -(storagePeriod*24*3600*1000)));
+                executeUpdate(deleteMessages);
+            } catch (SQLException ex) {
+                Logger.getLogger(DBUtil.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
     }
     
@@ -365,6 +367,8 @@ public class DBUtil {
     private static void connect() {
         try {
             dbConnection = dataBase.getConnection(dbUser, dbPassword);
+            
+            checkTables();
             
             logJobCreate = dbConnection.prepareStatement("INSERT INTO jobs VALUES (?,?,?,0,0,0,NULL,NULL,0,0,0,?,?)");
             logJobCoord = dbConnection.prepareStatement("INSERT INTO jobcoords VALUES (?,?,?,?,?)");
@@ -393,6 +397,24 @@ public class DBUtil {
         }
     }
     
+    private static void checkTables() throws SQLException {
+        //ResultSet result = dbConnection.createStatement().executeQuery("SHOW TABLE STATUS WHERE name = 'jobs'");
+        //if(!result.first()) {
+        dbConnection.createStatement().execute("CREATE TABLE IF NOT EXISTS jobs "
+                                              +"(jobID INT(11), owner VARCHAR(50), jobType VARCHAR(150),"
+                                              +"startTime TIMESTAMP NULL, found BIGINT(20) DEFAULT 0, "
+                                              +"processed BIGINT(20) DEFAULT 0, chunkX INT(11), chunkZ INT(11),"
+                                              +"x SMALLINT(6), y SMALLINT(6), z SMALLINT(6), "
+                                              +"actionType VARCHAR(150), world VARCHAR(50))");
+        dbConnection.createStatement().execute("CREATE TABLE IF NOT EXISTS blockid "
+                                              +"(ID SMALLINT(6), DV TINYINT(4), jobID SMALLINT(6),"
+                                              +"`index` SMALLINT(6), counter INT(11) DEFAULT 0)");
+        dbConnection.createStatement().execute("CREATE TABLE IF NOT EXISTS jobcoords "
+                                              +"(x INT(11), y INT(11), z INT(11),"
+                                              +"jobID INT(11), coordID INT(11))");
+        dbConnection.createStatement().execute("CREATE TABLE IF NOT EXISTS messages "
+                                              +"(time TIMESTAMP NULL, message TEXT)");
+    }
     private static void executeUpdate(final PreparedStatement statement) {
         if(executeUpdatesAsync) {
             new BukkitRunnable(){

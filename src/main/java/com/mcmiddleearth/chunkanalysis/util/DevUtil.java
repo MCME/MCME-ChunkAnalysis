@@ -40,7 +40,7 @@ public class DevUtil {
     
     @Setter
     @Getter
-    private static boolean consoleOutput = true;
+    private static boolean consoleOutput = false;
     
     @Setter
     @Getter

@@ -25,6 +25,7 @@ import com.mcmiddleearth.chunkanalysis.MessageManager;
 import com.mcmiddleearth.chunkanalysis.job.CuboidJob;
 import com.mcmiddleearth.chunkanalysis.job.PolyJob;
 import com.mcmiddleearth.chunkanalysis.job.action.JobAction;
+import com.mcmiddleearth.chunkanalysis.util.DBUtil;
 import com.mcmiddleearth.pluginutil.NumericUtil;
 import com.sk89q.worldedit.BlockVector2D;
 import com.sk89q.worldedit.bukkit.selections.CuboidSelection;
@@ -59,6 +60,10 @@ public abstract class AbstractStartCommand extends AbstractCommand {
     @Override
     protected void execute(CommandSender cs, String... argz) {
         List<String> args = Arrays.asList(argz);
+        if(!DBUtil.checkConnection() && !args.contains("-o")) {
+            ChunkAnalysis.getMessageUtil().sendErrorMessage(cs, "No database connection. If the server crashes while the job is running it will not be continued. To start the job anyways at '-o' argument at own risk.");
+            return;
+        }
         if(args.contains("-m") && args.contains("-p")){
             ChunkAnalysis.getMessageUtil().sendErrorMessage(cs, "Cannot have both map and pack");
             return;
@@ -169,7 +174,7 @@ public abstract class AbstractStartCommand extends AbstractCommand {
                 return -1;
             }
         } else {
-            return 0;
+            return -1;
         }
     }
 

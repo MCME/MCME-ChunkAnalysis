@@ -42,10 +42,14 @@ public class JobManager {
     @Getter
     private static List<Job> pendingJobs = new ArrayList<>();
     
-    public static void init() {
+    private static int tps;
+    
+    public static void init(int setTps) {
+        tps = setTps;
         pendingJobs = DBUtil.loadJobs();
         for(Job job: pendingJobs) {
             MessageManager.addListeningPlayer(job.getOwner());
+            MessageManager.sendJobRestarted(job);
         }
         if(pendingJobs.size()>0) {
             startScheduler();
@@ -71,11 +75,11 @@ public class JobManager {
     
     private static void startScheduler() {
         if(!isSchedulerTaskRunning()) {
-            DevUtil.log("start scheduler with tps "+15);
+            DevUtil.log("start scheduler with tps "+tps);
             boolean dbConnected = DBUtil.checkConnection();
             DevUtil.log("Database connected: "+dbConnected);
             jobScheduler = new JobScheduler(pendingJobs);
-            jobScheduler.setServerTps(15);
+            jobScheduler.setServerTps(tps);
             schedulerTask=jobScheduler.runTaskAsynchronously(ChunkAnalysis.getInstance());
         }
     }

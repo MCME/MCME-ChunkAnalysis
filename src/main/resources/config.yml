@@ -1,4 +1,24 @@
-world:
-  minBlock: 0,0
-  maxBlock: 1000,1000
-messageStoragePeriod: 1
+# Days to keep messages achieved in the database
+messageStoragePeriod: 7
+
+# server ticks per second to aim for (increase to 17 or 18 if server lag occurs, 
+# values below 15 might crash the server.
+tps: 15
+
+# database connection
+db:
+  ip: localhost
+  port: 3306
+  name: test
+  user: test
+  password: test
+  
+# world configuration, 
+# jobs with -m option will work on a cuboid area between minBlock and maxBlock.
+worlds:
+  world:
+    minBlock: -12286,-12160
+    maxBlock: 17408,14975
+  moria:
+    minBlock: -10000,-10000
+    maxBlock: -2000,-2000
