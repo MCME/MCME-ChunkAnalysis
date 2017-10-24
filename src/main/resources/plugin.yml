@@ -8,6 +8,17 @@ softdepend: [MCME-Architect, ResourceRegions]
 commands:
   block:
     description: analyse of modify blocks by filter
-    usage: |
-            /block analyse <Block ID>[:data] -t [json tags] -p [pack] -s
-            /block replace <Find ID>[:find data] -t [find tags] <Replace ID>[:replace data] -t [replace tags] -s -p [pack] -d
+    usage: see /block help
+permissions:
+    chunkanalysis.*:
+        description: Allows to use all features of ChunkAnalyis plugin
+        default: op  
+        children:
+          chunkanalysis.use: true
+          chunkanalysis.developer: true
+    chunkanalysis.use:
+        description: Allows to use all commands of ChunkAnalysis plugin except /block dev
+        default: op  
+    chunkanalysis.developer:
+        description: Allows to use command /block dev
+        default: op  
